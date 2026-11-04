@@ -2,12 +2,12 @@
 import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { PlatformClient } from './platform';
-import { CityScene } from './scene';
+import { CityScene, type CameraView } from './scene';
 import { World, type Car, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') ?? 11);
-const scouts = Number(params.get('scouts') ?? 5);
+const scouts = Number(params.get('scouts') ?? 8);
 const drivers = Number(params.get('drivers') ?? 30);
 const networkShare = Number(params.get('network') ?? 0.7);
 const framesPerSecond = Number(params.get('fps') ?? 1);
@@ -250,24 +250,62 @@ placeButton.addEventListener('click', () => {
 });
 
 $('map').addEventListener('click', (e) => {
-  if (!placing) return;
-  const id = map.stallAt(e.clientX, e.clientY);
-  if (id) toggleStallCar(id);
+  const id = placing ? map.stallAt(e.clientX, e.clientY) : map.carAt(e.clientX, e.clientY, world);
+  if (id && placing) toggleStallCar(id);
+  else if (id) selectCar(id);
 });
 
+// A click, not the end of a drag that was moving the camera.
+let pressedAt = { x: 0, y: 0 };
+$('city').addEventListener('pointerdown', (e) => {
+  pressedAt = { x: e.offsetX, y: e.offsetY };
+});
 $('city').addEventListener('pointerup', (e) => {
-  if (!placing) return;
-  const id = scene.pickStall(e.offsetX, e.offsetY);
-  if (id) toggleStallCar(id);
+  if (Math.hypot(e.offsetX - pressedAt.x, e.offsetY - pressedAt.y) > 6) return;
+  const id = placing ? scene.pickStall(e.offsetX, e.offsetY) : scene.pickCar(e.offsetX, e.offsetY);
+  if (id && placing) toggleStallCar(id);
+  else if (id) selectCar(id);
 });
 
-const setView = (driver: boolean) => {
-  scene.follow(driver ? hero.id : null);
-  $('view-city').setAttribute('aria-pressed', String(!driver));
-  $('view-driver').setAttribute('aria-pressed', String(driver));
-};
-$('view-city').addEventListener('click', () => setView(false));
-$('view-driver').addEventListener('click', () => setView(true));
+let selectedId: string = hero.id;
+let currentView: CameraView = 'city';
+
+function describeCar(car: Car): string {
+  const kind = { hero: 'Your car', scout: 'Survey car', network: 'Network driver', manual: 'Driver with no app', parked: 'Parked car' }[car.role];
+  const place = city.destinations.find((d) => d.id === car.destinationId);
+  return place ? `${kind}, heading to ${place.name}` : kind;
+}
+
+function showSelection() {
+  const car = world.cars.get(selectedId);
+  $('selected-car').textContent = car ? describeCar(car) : 'That car has left the city. Click another.';
+}
+
+function setView(view: CameraView) {
+  currentView = view;
+  scene.setView(view, selectedId);
+  for (const [id, name] of [['view-city', 'city'], ['view-chase', 'chase'], ['view-dash', 'dash']] as const) {
+    $(id).setAttribute('aria-pressed', String(view === name));
+  }
+}
+
+function selectCar(id: string) {
+  selectedId = id;
+  if (currentView !== 'city') scene.setView(currentView, id);
+  showSelection();
+}
+
+$('view-city').addEventListener('click', () => setView('city'));
+$('view-chase').addEventListener('click', () => setView('chase'));
+$('view-dash').addEventListener('click', () => setView('dash'));
+
+const labelsToggle = $('toggle-labels') as HTMLInputElement;
+labelsToggle.addEventListener('change', () => scene.setLabelsVisible(labelsToggle.checked));
+
+const lightsToggle = $('toggle-lights') as HTMLInputElement;
+lightsToggle.addEventListener('change', () => {
+  world.signals.mode = lightsToggle.checked ? 'fixed' : 'off';
+});
 
 $('trip').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -281,11 +319,13 @@ $('trip').addEventListener('submit', async (e) => {
 
 scene.start((dt) => {
   world.tick(dt * timeScale);
-  map.draw(twin, world, highlight);
+  map.draw(twin, world, highlight, selectedId);
 });
 
 setInterval(() => void takePhoto(), 1000 / framesPerSecond);
 setInterval(() => void pollTwin(), 700);
+setInterval(showSelection, 1000);
+showSelection();
 
 // For scripted test runs.
 Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar } });

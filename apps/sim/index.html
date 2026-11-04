@@ -54,8 +54,12 @@
     <section class="panel driver-panel" aria-label="Driver console">
       <div class="views">
         <button id="view-city" type="button" aria-pressed="true">City</button>
-        <button id="view-driver" type="button" aria-pressed="false">Driver</button>
+        <button id="view-chase" type="button" aria-pressed="false">Behind car</button>
+        <button id="view-dash" type="button" aria-pressed="false">Dashboard</button>
+        <label class="check"><input id="toggle-labels" type="checkbox" checked />Labels</label>
+        <label class="check"><input id="toggle-lights" type="checkbox" checked />Traffic lights</label>
       </div>
+      <p class="selected">Click any car to view it. Viewing: <b id="selected-car">Your car</b></p>
       <ol class="log" id="log" aria-live="polite"></ol>
       <form id="trip">
         <label for="trip-text">Tell the orange car where to go</label>

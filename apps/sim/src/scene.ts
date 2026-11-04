@@ -19,12 +19,17 @@ import {
   Vector3,
   Vector4,
 } from '@babylonjs/core';
-import { add, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
+import { add, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
+import type { LightState } from './signals';
 import type { Car, World } from './world';
+
+export type CameraView = 'city' | 'chase' | 'dash';
 
 /** Everything on this layer is invisible to capture cameras, so overlays cannot leak into frames. */
 const OVERLAY_LAYER = 0x10000000;
 const WORLD_LAYER = 0x0fffffff;
+/** Building labels: shown to people, hidden from capture cameras. */
+const LABEL_LAYER = 0x20000000;
 const FRAME_WIDTH = 1280;
 const FRAME_HEIGHT = 720;
 const FOV_Y = 0.9;
@@ -67,6 +72,10 @@ export class CityScene {
   private readonly stallMarkers = new Map<string, Mesh>();
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
+  private view: CameraView = 'city';
+  private readonly labels: Mesh[] = [];
+  private readonly lights: { nodeId: string; dir: Vec2; lamp: Mesh; bar: Mesh }[] = [];
+  private lightMaterials!: Record<LightState, StandardMaterial>;
   private readonly frameTarget: RenderTargetTexture;
   private readonly encodeContext: CanvasRenderingContext2D;
   private captureChain: Promise<unknown> = Promise.resolve();
@@ -96,14 +105,14 @@ export class CityScene {
     this.overview.upperBetaLimit = 1.35;
     this.overview.wheelPrecision = 2;
     this.overview.panningSensibility = 12;
-    this.overview.layerMask = WORLD_LAYER | OVERLAY_LAYER;
+    this.overview.layerMask = WORLD_LAYER | OVERLAY_LAYER | LABEL_LAYER;
     this.overview.attachControl(canvas, true);
 
     this.chase = new FreeCamera('chase', new Vector3(0, 3, 0), this.scene);
     this.chase.fov = 1.0;
     this.chase.minZ = 0.2;
     this.chase.maxZ = 900;
-    this.chase.layerMask = WORLD_LAYER;
+    this.chase.layerMask = WORLD_LAYER | LABEL_LAYER;
 
     this.capture = new FreeCamera('capture', new Vector3(0, 1.4, 0), this.scene);
     this.capture.fov = FOV_Y;
@@ -133,6 +142,8 @@ export class CityScene {
     this.buildBuildings();
     this.buildStalls();
     this.buildDestinationSigns();
+    this.buildBuildingLabels();
+    this.buildSignals();
   }
 
   private overlayMaterial(state: StallState) {
@@ -326,6 +337,95 @@ export class CityScene {
     }
   }
 
+  /** Floating names above each destination. On their own layer, so cameras never see them. */
+  private buildBuildingLabels() {
+    for (const d of this.city.destinations) {
+      const tex = new DynamicTexture(`label-${d.id}`, { width: 640, height: 112 }, this.scene, true);
+      tex.hasAlpha = true;
+      const ctx = tex.getContext() as CanvasRenderingContext2D;
+      ctx.clearRect(0, 0, 640, 112);
+      ctx.font = '800 58px Overpass, Arial, sans-serif';
+      const width = Math.min(ctx.measureText(d.name).width + 48, 632);
+      ctx.fillStyle = '#0B4EA2';
+      ctx.fillRect(320 - width / 2, 8, width, 96);
+      ctx.strokeStyle = '#F4F5F2';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(320 - width / 2 + 7, 15, width - 14, 82);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(d.name, 320, 62, width - 30);
+      tex.update();
+      const m = new StandardMaterial(`label-${d.id}`, this.scene);
+      m.diffuseTexture = tex;
+      m.emissiveColor = Color3.White();
+      m.disableLighting = true;
+      m.useAlphaFromDiffuseTexture = true;
+      const plate = MeshBuilder.CreatePlane(`label-${d.id}`, { width: 34, height: 6 }, this.scene);
+      plate.material = m;
+      plate.isPickable = false;
+      plate.billboardMode = Mesh.BILLBOARDMODE_ALL;
+      plate.layerMask = LABEL_LAYER;
+      const pos = add(d, scale(d.normal, 8));
+      plate.position.set(pos.x, 26, pos.z);
+      this.labels.push(plate);
+    }
+  }
+
+  setLabelsVisible(visible: boolean) {
+    for (const label of this.labels) label.setEnabled(visible);
+  }
+
+  private buildSignals() {
+    this.lightMaterials = {
+      green: this.lampMaterial('#2FE36F'),
+      yellow: this.lampMaterial('#FFC928'),
+      red: this.lampMaterial('#FF3B2F'),
+    };
+    const pole = this.solid('#2b2f33');
+    const { graph, signals } = this.world;
+    for (const nodeId of signals.nodes) {
+      for (const leaving of graph.next(nodeId)) {
+        const edge = { from: leaving.to, to: leaving.from };
+        const dir = graph.edgeDir(edge);
+        const right = rightOf(dir);
+        const stopLine = add(graph.node(nodeId), scale(dir, -(graph.corner + 1)));
+        const post = add(stopLine, scale(right, this.city.roadHalfWidth + 0.7));
+        const mast = MeshBuilder.CreateCylinder('signal-pole', { diameter: 0.2, height: 5 }, this.scene);
+        mast.position.set(post.x, 2.5, post.z);
+        mast.material = pole;
+        mast.isPickable = false;
+        const lamp = MeshBuilder.CreateSphere('signal-lamp', { diameter: 0.7, segments: 8 }, this.scene);
+        lamp.position.set(post.x, 5.2, post.z);
+        lamp.isPickable = false;
+        // A bar across the lane so the light's state reads from the overview camera.
+        const barCenter = add(stopLine, scale(right, this.city.laneOffset));
+        const bar = MeshBuilder.CreateGround('signal-bar', { width: 3.4, height: 1 }, this.scene);
+        bar.position.set(barCenter.x, 0.07, barCenter.z);
+        bar.rotation.y = Math.atan2(dir.x, dir.z);
+        bar.isPickable = false;
+        bar.layerMask = OVERLAY_LAYER;
+        this.lights.push({ nodeId, dir, lamp, bar });
+      }
+    }
+  }
+
+  private lampMaterial(hex: string) {
+    const m = new StandardMaterial(`lamp-${hex}`, this.scene);
+    m.emissiveColor = Color3.FromHexString(hex);
+    m.diffuseColor = Color3.Black();
+    m.specularColor = Color3.Black();
+    return m;
+  }
+
+  private updateLights() {
+    for (const { nodeId, dir, lamp, bar } of this.lights) {
+      const material = this.lightMaterials[this.world.signals.state(nodeId, dir, this.world.time)];
+      lamp.material = material;
+      bar.material = material;
+    }
+  }
+
   private carTemplate(variant: number, hex: string): Mesh {
     const key = `${variant}${hex}`;
     const existing = this.templates.get(key);
@@ -397,18 +497,43 @@ export class CityScene {
     }
   }
 
-  follow(carId: string | null) {
-    this.followId = carId;
-    this.scene.activeCamera = carId ? this.chase : this.overview;
+  /** Picks what the main view shows: the city, or a car from behind or from its dashboard. */
+  setView(view: CameraView, carId: string | null) {
+    this.view = view;
+    this.followId = view === 'city' ? null : carId;
+    this.scene.activeCamera = view === 'city' ? this.overview : this.chase;
   }
 
   private updateChase() {
     const car = this.followId ? this.world.cars.get(this.followId) : null;
     if (!car) return;
-    const eye = add(car.pos, scale(car.heading, -9));
-    this.chase.position.set(eye.x, 4.2, eye.z);
-    const look = add(car.pos, scale(car.heading, 10));
-    this.chase.setTarget(new Vector3(look.x, 1.2, look.z));
+    if (this.view === 'dash') {
+      const eye = add(car.pos, scale(car.heading, 2.7));
+      this.chase.position.set(eye.x, 1.25, eye.z);
+      const look = add(car.pos, scale(car.heading, 30));
+      this.chase.setTarget(new Vector3(look.x, 1.1, look.z));
+    } else {
+      const eye = add(car.pos, scale(car.heading, -9));
+      this.chase.position.set(eye.x, 4.2, eye.z);
+      const look = add(car.pos, scale(car.heading, 10));
+      this.chase.setTarget(new Vector3(look.x, 1.2, look.z));
+    }
+  }
+
+  /** The car nearest a clicked point in the 3D view. */
+  pickCar(x: number, y: number): string | null {
+    const p = this.scene.pick(x, y, (m) => m.name === 'asphalt')?.pickedPoint;
+    if (!p) return null;
+    let best: string | null = null;
+    let bestDist = 9;
+    for (const car of this.world.cars.values()) {
+      const d = Math.hypot(car.pos.x - p.x, car.pos.z - p.z);
+      if (d < bestDist) {
+        bestDist = d;
+        best = car.id;
+      }
+    }
+    return best;
   }
 
   /** The stall nearest a clicked point in the 3D view. */
@@ -456,7 +581,7 @@ export class CityScene {
       this.capture.setTarget(new Vector3(...pose.target));
       this.capture.getViewMatrix(true);
       // Rebuilt each time so cars that spawned since the last frame are included.
-      this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER);
+      this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER && m.layerMask !== LABEL_LAYER);
       this.frameTarget.resetRefreshCounter();
       this.scene.onAfterRenderObservable.addOnce(async () => {
         try {
@@ -486,6 +611,7 @@ export class CityScene {
       onFrame(Math.min(this.engine.getDeltaTime() / 1000, 0.1));
       this.syncCars();
       this.updateChase();
+      this.updateLights();
       this.scene.render();
     });
     window.addEventListener('resize', () => this.engine.resize());

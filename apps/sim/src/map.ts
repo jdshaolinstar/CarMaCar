@@ -37,6 +37,25 @@ export class LiveMap {
     return [this.ox + p.x * this.k, this.oz - p.z * this.k];
   }
 
+  /** The moving car nearest a click on the canvas. */
+  carAt(clientX: number, clientY: number, world: World): string | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * this.canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * this.canvas.height;
+    let best: string | null = null;
+    let bestDist = 16;
+    for (const car of world.cars.values()) {
+      if (car.phase === 'parked') continue;
+      const [cx, cy] = this.px(car.pos);
+      const d = Math.hypot(cx - x, cy - y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = car.id;
+      }
+    }
+    return best;
+  }
+
   /** The stall nearest a click on the canvas. */
   stallAt(clientX: number, clientY: number): string | null {
     const rect = this.canvas.getBoundingClientRect();
@@ -55,7 +74,7 @@ export class LiveMap {
     return best;
   }
 
-  draw(twin: TwinSnapshot | null, world: World, highlight: string | null) {
+  draw(twin: TwinSnapshot | null, world: World, highlight: string | null, selected: string | null) {
     const { ctx, canvas, city } = this;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
@@ -119,6 +138,13 @@ export class LiveMap {
       ctx.beginPath();
       ctx.arc(x, y, car.role === 'hero' ? 8 : 5, 0, Math.PI * 2);
       ctx.fill();
+      if (car.id === selected) {
+        ctx.strokeStyle = '#F2B90F';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
 }

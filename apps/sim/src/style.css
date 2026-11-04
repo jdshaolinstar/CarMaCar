@@ -117,7 +117,10 @@ h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 
 .caption { margin-top: 8px; font-size: 14px; color: var(--muted); }
 
-.views { display: flex; gap: 6px; margin-bottom: 8px; }
+.views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
+.check { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-size: 14px; cursor: pointer; }
+.selected { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.selected b { color: var(--line-white); font-weight: 600; }
 
 .log {
   list-style: none;
