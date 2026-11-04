@@ -34,7 +34,7 @@ export function movementOf(entering: Vec2, leaving: Vec2): Movement {
 /** Whether two cars could hit each other if they used an intersection at the same time. */
 export function movementsConflict(a: Movement, b: Movement): boolean {
   const facing = dot(a.entering, b.entering);
-  if (facing > 0.9) return false; // Same direction: normal car following handles it.
+  if (facing > 0.9) return a.turn !== b.turn; // One lane: a car cannot pass another taking a different turn.
   if (facing < -0.9) return a.turn === 'left' || b.turn === 'left'; // Left turns cross oncoming traffic, and each other.
   return true; // Crossing traffic.
 }

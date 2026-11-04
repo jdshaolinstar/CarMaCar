@@ -160,6 +160,7 @@ const LANDING_LENGTH = 6;
 /** Street traffic covers this in about 3 seconds, the time a car takes to pull out. */
 const MERGE_GAP = 36;
 const MERGE_LANDING = 8;
+const DOOR_CLEARANCE = 9;
 const HUB_RADIUS = 9;
 const AISLE_CLEARANCE = 13;
 const PULL_OUT_GAP = 26;
@@ -853,6 +854,13 @@ export class World {
     return true;
   }
 
+  private doorClear(g: Garage, car: Car): boolean {
+    for (const other of this.activeCars) {
+      if (other !== car && other.level === 0 && other.insideGarage && distance(other.pos, g.door) < DOOR_CLEARANCE) return false;
+    }
+    return true;
+  }
+
   /** Whether the aisle outside a garage stall is free to back out into. */
   private aisleClear(car: Car, stall: Stall): boolean {
     const exit = this.aislePoint(this.garageOf(stall), stall, true);
@@ -1060,6 +1068,17 @@ export class World {
     if (light === 'red' || (light === 'yellow' && stoppingDistance(car.speed) < toStopLine)) return false;
     const mine = car.movement;
     if (!mine) return true;
+    // Do not enter unless there is room to leave. A car stopped inside blocks everyone.
+    const exit = this.pendingEdge.get(car.id);
+    if (exit) {
+      const beyond = this.graph.lanePoint(exit, this.graph.corner + 4);
+      const exitDir = this.graph.edgeDir(exit);
+      for (const other of this.activeCars) {
+        // Same way only: the opposite lane's queue sits right beside this spot.
+        if (other === car || other.level !== 0 || other.speed >= 2 || dot(other.heading, exitDir) < 0.5) continue;
+        if (distance(other.pos, beyond) < 6.5) return false;
+      }
+    }
     for (const id of this.junctions.get(nodeId) ?? []) {
       const other = this.cars.get(id);
       if (other?.movement && movementsConflict(mine, other.movement)) return false;
@@ -1178,6 +1197,12 @@ export class World {
       let limit = car.insideGarage ? GARAGE_SPEED : nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
       const followGap = car.nav === 'autopilot' ? AUTOPILOT_FOLLOW_GAP : FOLLOW_GAP;
       limit = Math.min(limit, brakingSpeed(this.gapAhead(car) - followGap));
+
+      // Wait in the lane until the doorway is clear, rather than turning into a stopped car.
+      const headedFor = car.endsAtStall && !car.insideGarage && car.targetStallId ? this.stalls.get(car.targetStallId) : null;
+      if (headedFor?.garageId && !this.doorClear(this.garageOf(headedFor), car)) {
+        limit = Math.min(limit, brakingSpeed(path.length - car.s));
+      }
 
       const toStopLine = car.stopS - car.s;
       if (!car.junction && toStopLine < STOP_LOOKAHEAD) {

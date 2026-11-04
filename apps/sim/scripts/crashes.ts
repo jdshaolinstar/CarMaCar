@@ -29,7 +29,7 @@ for (let t = 0; t < 500; t += 1 / 20) {
     for (let j = i + 1; j < moving.length; j++) {
       const a = moving[i];
       const b = moving[j];
-      if (a.level !== b.level || a.merging || b.merging || Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) >= 2.6) continue;
+      if (a.level !== b.level || a.merging || b.merging || world.time - a.mergedAt < 3 || world.time - b.mergedAt < 3 || Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) >= 2.6) continue;
       const key = [a.id, b.id].sort().join('+');
       if (seen.has(key)) continue;
       seen.add(key);
