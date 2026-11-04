@@ -40,7 +40,9 @@ apps/sim (browser)                         apps/platform (Node service)
 
 **Muse Spark, as agents.** The trip agent turns "Drive to the movie theater. Find parking. The movie ends at 3pm" into tool calls that find, reserve and schedule. The city operator turns "There's a parade on Market St tonight" into settings for the routing system.
 
-**Traffic Efficiency System (TES).** Deterministic code plots a route and a stall for each connected car, weighing traffic, the plans of other cars, and the walk. Muse Spark sets goals and explains. It does not run the moment-to-moment loop, because that has to be fast and repeatable.
+**Muse Spark, as a vision model.** Spark looks for trash on sidewalks and names what it finds, and it can read parking too. SAM is faster and repeatable, so it reads parking by default. The Systems panel lets you switch models for either job.
+
+**Traffic Efficiency System (TES).** Code plots a route and a stall for each connected car, weighing traffic, the plans of other cars, and the walk. That loop has to be fast and repeatable. Above it sits the **Spark Strategist**: every 30 seconds, Muse Spark reads a digest of the whole city and steers TES through tools, avoiding streets, holding lights and moving demand between parking areas. That is the split real traffic centers use: strategy on top, controllers underneath.
 
 **Why cameras, when cars have GPS?** GPS only covers people who share their location, and it knows nothing about parking. Cameras see every vehicle and every stall.
 
@@ -54,11 +56,33 @@ Three kinds of driver show the difference:
 
 Every result below is from this simulation, not a real city. Real streets, weather and camera placement will differ.
 
-**Vision, on live frames.** RESULTS_VISION_HERE
+**Vision, on rendered frames.**
+
+- Street parking: 303 of 305 stall readings correct across two live runs, in moving traffic.
+- Garage parking: 152 of 152 readings correct, reading 90% of garage stalls in one sweep of the cameras.
+- Trash: Muse Spark found 15 items in 6 test frames, 14 of them real. SAM with the prompt "garbage bag" found 7, all real. Both are selectable in the app.
+
+These frames come from a simple 3D city. Real photos will be harder, so treat this as proof the pipeline works, not as real-world accuracy.
 
 **Traffic, simulated.** Same city, same drivers, several seeds. Only how cars navigate changes.
 
-RESULTS_TABLE_HERE
+| Everyday traffic | Time to park | City driving |
+|---|---:|---:|
+| TES off | 129 s | 32.5 km |
+| TES on, 60% of cars guided | 109 s | 26.1 km |
+| TES on, 30% guided, 30% autopilot | 114 s | 25.4 km |
+| TES on, 100% autopilot | 110 s | 21.2 km |
+| 100% autopilot with smart lights | 90 s | 21.1 km |
+
+| Movie theater surge | Drivers parked | Time to park |
+|---|---:|---:|
+| TES off | 18 | 524 s |
+| TES on, 60% of cars guided | 36 | 431 s |
+| TES on, 30% guided, 30% autopilot | 40 | 414 s |
+| TES on, 100% autopilot | 65 | 289 s |
+| 100% autopilot with smart lights | 67 | 285 s |
+
+Four seeds each. A surge sends 110 drivers to one cinema within two minutes, so many are still searching at the end of every run, and average times include them.
 
 How much these numbers can be trusted depends on the simulated human drivers, whose search behavior is an assumption. Results and more detail are in the app under **Results**, and `apps/sim/scripts/tes-study.ts` reproduces them.
 
@@ -67,9 +91,10 @@ How much these numbers can be trusted depends on the simulated human drivers, wh
 | Part | Status |
 |---|---|
 | Camera vision, parking map | Production. Runs on Meta SAM 3.1 with geometry code. |
-| Trip agent, city operator | Production. Run on Meta Muse Spark with real tool calls. |
-| Traffic Efficiency System, smart lights | Production. Deterministic code. |
-| City, cars, drivers, survey cars | Simulation. Scripted, with no AI. |
+| Trip agent, city operator, Spark Strategist | Production. Run on Meta Muse Spark with real tool calls. |
+| Trash detection | Production. Runs on Meta Muse Spark or SAM 3.1, your choice. |
+| Traffic Efficiency System routing, smart lights | Production. Deterministic code, steered by the Strategist. |
+| City, cars, drivers, pedestrians, survey cars | Simulation. Scripted, with no AI. |
 | Self-driving | Simulation. A stand-in for a real autopilot. |
 
 ## Run it yourself

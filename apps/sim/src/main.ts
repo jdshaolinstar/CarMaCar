@@ -76,7 +76,7 @@ let twin: TwinSnapshot | null = null;
 let highlight: string | null = null;
 const frameImages = new Map<string, string>();
 const truthAtCapture = new Map<string, Set<string>>();
-const readings = { right: 0, falseFree: [] as string[], falseTaken: [] as string[] };
+const readings = { right: 0, falseFree: [] as string[], falseTaken: [] as string[], misses: [] as { id: string; report: unknown; image: string }[] };
 let inFlight = 0;
 let frameLimitHit = false;
 
@@ -98,6 +98,7 @@ const garageCameras = city.garages.flatMap((g) =>
   g.cameras.map((camera, index) => ({ id: `${g.id}-cam${index + 1}`, garage: g, camera })),
 );
 let photosTaken = 0;
+const CLEAR_VIEW_METRES = 13;
 let nextGarageCamera = 0;
 
 /** Every third photo comes from a fixed garage camera, taking turns. */
@@ -119,7 +120,7 @@ function chooseGarageCamera(): { id: string; pose: CameraPose } | null {
   };
 }
 
-function chooseCamera(): { car: Car; pose: CameraPose } | null {
+function chooseCamera(): { car: Car; getPose: () => CameraPose } | null {
   let best: { car: Car; side: Vec2 } | null = null;
   let bestAge = -1;
   const now = Date.now();
@@ -127,6 +128,8 @@ function chooseCamera(): { car: Car; pose: CameraPose } | null {
     if (!['scout', 'network', 'hero'].includes(car.role) || car.metersSinceCapture < 8) continue;
     const view = stallSideFor(car);
     if (!view) continue;
+    // A blocked view can look like an empty street, so a car right behind another stays quiet.
+    if (!world.viewClear(car, CLEAR_VIEW_METRES)) continue;
     // A driver looking at their own reserved stall comes first: that photo can save them the trip.
     const watchingOwnStall = car.targetStallId !== null && view.stallIds.includes(car.targetStallId);
     const age = watchingOwnStall
@@ -142,25 +145,28 @@ function chooseCamera(): { car: Car; pose: CameraPose } | null {
       best = { car, side: view.side };
     }
   }
-  return best ? { car: best.car, pose: scene.poseFor(best.car, best.side) } : null;
+  if (!best) return null;
+  const { car, side } = best;
+  return { car, getPose: () => scene.poseFor(car, side) };
 }
 
 async function takePhoto() {
   if (!platform || !visionOn || inFlight >= 3 || frameLimitHit) return;
   const fromGarage = ++photosTaken % 3 === 0 ? chooseGarageCamera() : null;
   const fromCar = fromGarage ? null : chooseCamera();
-  const pose = fromGarage?.pose ?? fromCar?.pose;
-  if (pose && fromCar && trashScanOn && photosTaken % 3 === 1) pose.scanTrash = true;
+  const getPose = fromGarage ? () => fromGarage.pose : fromCar?.getPose;
+  const scanTrash = !!fromCar && trashScanOn && photosTaken % 3 === 1;
   const scoutId = fromGarage?.id ?? fromCar?.car.id;
-  if (!pose || !scoutId) return;
+  if (!getPose || !scoutId) return;
   inFlight++;
   if (fromCar) fromCar.car.metersSinceCapture = 0;
   try {
     // Truth is copied at the moment of rendering, so a reading is judged on what the photo showed.
     let truth = new Set<string>();
-    const dataUrl = await scene.captureFrame(pose, () => {
+    const { dataUrl, pose } = await scene.captureFrame(getPose, () => {
       truth = new Set(world.stallOwner.keys());
     });
+    if (scanTrash) pose.scanTrash = true;
     const capturedAt = Date.now();
     frameImages.set(`${scoutId}:${capturedAt}`, dataUrl);
     truthAtCapture.set(`${scoutId}:${capturedAt}`, truth);
@@ -189,7 +195,10 @@ function scoreReadings() {
     for (const { id, state } of report.stalls) {
       const occupied = truth.has(id);
       if ((state === 'occupied') === occupied) readings.right++;
-      else if (state === 'free') readings.falseFree.push(id);
+      else if (state === 'free') {
+        readings.falseFree.push(id);
+        readings.misses.push({ id, report, image: frameImages.get(key) ?? '' });
+      }
       else readings.falseTaken.push(id);
     }
   }

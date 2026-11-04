@@ -949,28 +949,33 @@ export class CityScene {
   }
 
   /** Renders a real frame from the camera. Returns a JPEG data URL. */
-  captureFrame(pose: CameraPose, onRendered?: () => void): Promise<string> {
-    const run = this.captureChain.then(() => this.renderFrame(pose, onRendered));
+  /** The pose is worked out at render time, so it always matches the photo, even at a low frame rate. */
+  captureFrame(getPose: () => CameraPose, onRendered?: () => void): Promise<{ dataUrl: string; pose: CameraPose }> {
+    const run = this.captureChain.then(() => this.renderFrame(getPose, onRendered));
     this.captureChain = run.catch(() => undefined);
     return run;
   }
 
   // Uses its own offscreen target. Babylon's screenshot helper resizes the main canvas,
   // which collides with the render loop and leaves ghost trails on screen.
-  private renderFrame(pose: CameraPose, onRendered?: () => void): Promise<string> {
+  private renderFrame(getPose: () => CameraPose, onRendered?: () => void): Promise<{ dataUrl: string; pose: CameraPose }> {
     return new Promise((resolve, reject) => {
-      this.capture.fov = pose.fovY;
-      this.capture.position.set(...pose.position);
-      this.capture.setTarget(new Vector3(...pose.target));
-      this.capture.getViewMatrix(true);
-      // Rebuilt each time so cars that spawned since the last frame are included.
-      this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER && m.layerMask !== LABEL_LAYER);
-      this.frameTarget.resetRefreshCounter();
+      let pose: CameraPose;
+      this.scene.onBeforeRenderObservable.addOnce(() => {
+        pose = getPose();
+        this.capture.fov = pose.fovY;
+        this.capture.position.set(...pose.position);
+        this.capture.setTarget(new Vector3(...pose.target));
+        this.capture.getViewMatrix(true);
+        // Rebuilt each time so cars that spawned since the last frame are included.
+        this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER && m.layerMask !== LABEL_LAYER);
+        this.frameTarget.resetRefreshCounter();
+      });
       this.scene.onAfterRenderObservable.addOnce(async () => {
         onRendered?.();
         try {
           const pixels = (await this.frameTarget.readPixels(0, 0, null, true)) as Uint8Array;
-          resolve(this.encodeJpeg(pixels));
+          resolve({ dataUrl: this.encodeJpeg(pixels), pose });
         } catch (err) {
           reject(err);
         }

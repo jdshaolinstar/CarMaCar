@@ -198,6 +198,7 @@ const DOOR_CLEARANCE = 9;
 const HUB_RADIUS = 9;
 const AISLE_CLEARANCE = 13;
 const PULL_OUT_GAP = 26;
+const VIEW_CORRIDOR = 2.4;
 
 const MANUAL_ACCELERATION = 5;
 const MANUAL_BRAKING = 10;
@@ -1261,6 +1262,17 @@ export class World {
   private leaveJunction(car: Car) {
     if (car.junction) this.junctions.get(car.junction)?.delete(car.id);
     car.junction = null;
+  }
+
+  /** Whether a car's forward view is open. A camera stuck behind traffic mostly sees the car ahead. */
+  viewClear(car: Car, metres: number): boolean {
+    for (const other of this.cars.values()) {
+      if (other === car || other.level !== car.level) continue;
+      const rel = sub(other.pos, car.pos);
+      const ahead = dot(rel, car.heading);
+      if (ahead > 0 && ahead < metres && Math.abs(dot(rel, rightOf(car.heading))) < VIEW_CORRIDOR) return false;
+    }
+    return true;
   }
 
   /** Whether a stretch of lane is clear enough to pull out or spawn into. */
