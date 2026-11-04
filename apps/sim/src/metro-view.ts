@@ -258,12 +258,7 @@ const LAB_MODES: { id: LabSession['mode']; label: string }[] = [
 
 /** Lays out generated code for reading. Models often return it as one long line. */
 function readable(code: string) {
-  const lines = code.replace(/;\s*/g, ';
-').replace(/\{\s*/g, '{
-').replace(/\s*\}\s*/g, '
-}
-').split('
-');
+  const lines = code.replace(/;\s*/g, ';\n').replace(/\{\s*/g, '{\n').replace(/\s*\}\s*/g, '\n}\n').split('\n');
   let depth = 0;
   const out: string[] = [];
   for (const raw of lines) {
@@ -273,8 +268,7 @@ function readable(code: string) {
     out.push(`${'  '.repeat(depth)}${line}`);
     if (line.endsWith('{')) depth++;
   }
-  return out.join('
-');
+  return out.join('\n');
 }
 
 /** The recorded sessions. Sessions run offline, because a static page has no simulator behind it. */
