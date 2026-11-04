@@ -7,6 +7,8 @@ import { PlatformClient } from './platform';
 import { CityScene, type CameraView, type TimeOfDay } from './scene';
 import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
+import { HIGHWAY_MODES, HighwayDemo, highwayDemoLayout, type HighwayModeId, type HighwayScenario } from './highway-demo';
+import { HighwayView } from './highway-view';
 import { World, type Car, type NavMode, type Walker, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
@@ -494,6 +496,26 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: false },
   },
   {
+    id: 'highwayTes',
+    name: 'Highway TES',
+    description: 'Uses known exits to move cars over early, keep the right lane clear, and spread traffic across exits.',
+    layer: 'production',
+    engine: 'Routing logic, fed by GPS and ramp cameras',
+    control: {
+      type: 'choice',
+      value: 'off',
+      options: (Object.keys(HIGHWAY_MODES) as HighwayModeId[]).map((value) => ({ value, label: HIGHWAY_MODES[value].label })),
+    },
+  },
+  {
+    id: 'highwayLights',
+    name: 'Smart ramp lights',
+    description: 'Shifts green time between ramps and cross streets. In testing this did not reduce total delay, so it is off by default.',
+    layer: 'production',
+    engine: 'Routing logic, needs ramp cameras',
+    control: { type: 'toggle', value: false },
+  },
+  {
     id: 'agent',
     name: 'Trip agent',
     description: 'Understands requests and plans trips with tools.',
@@ -564,6 +586,45 @@ const systems: SystemDef[] = [
     layer: 'simulation',
     engine: 'Meta Muse Spark',
     control: { type: 'toggle', value: false },
+  },
+  {
+    id: 'highway',
+    name: 'Ring highway',
+    description: 'A three-lane highway around the town with five interchanges. Its drivers are modeled, not scripted.',
+    layer: 'simulation',
+    engine: 'Driver model, no AI',
+    control: { type: 'toggle', value: false },
+  },
+  {
+    id: 'highwayScenario',
+    name: 'Highway traffic',
+    description: 'Evenly spread rush hour, or an event that sends half the traffic to one exit.',
+    layer: 'simulation',
+    engine: 'Scripted demand',
+    control: {
+      type: 'choice',
+      value: 'rush',
+      options: [
+        { value: 'rush', label: 'Rush hour' },
+        { value: 'stadium', label: 'Stadium event' },
+      ],
+    },
+  },
+  {
+    id: 'highwayLimit',
+    name: 'Highway speed limit',
+    description: 'Restarts the highway with the same drivers.',
+    layer: 'simulation',
+    engine: 'Road setting',
+    control: {
+      type: 'choice',
+      value: '65',
+      options: [
+        { value: '55', label: '55 mph' },
+        { value: '65', label: '65 mph' },
+        { value: '75', label: '75 mph' },
+      ],
+    },
   },
   {
     id: 'lights',
@@ -658,7 +719,70 @@ function applySystem(id: string, value: boolean | number | string) {
     syncTes();
   }  else if (id === 'speed') timeScale = value as number;
   else if (id === 'timeOfDay') scene.setTimeOfDay(value as TimeOfDay);
+  else if (id === 'highway') setHighway(value as boolean);
+  else if (id === 'highwayTes') highwayDemo().apply({ mode: value as HighwayModeId });
+  else if (id === 'highwayLights') highwayDemo().apply({ smartLights: value as boolean });
+  else if (id === 'highwayLimit') highwayDemo().apply({ limitMph: Number(value) });
+  else if (id === 'highwayScenario') highwayDemo().apply({ scenario: value as HighwayScenario });
 }
+
+// The highway, built only when someone asks for it.
+let highwayView: HighwayView | null = null;
+let highway: HighwayDemo | null = null;
+let highwayOn = false;
+
+function highwayDemo() {
+  if (!highway) {
+    highwayView = new HighwayView(scene.scene, city, highwayDemoLayout(), (variant, color) => scene.carTemplate(variant, color));
+    highway = new HighwayDemo(highwayView, seed);
+  }
+  return highway;
+}
+
+function setHighway(on: boolean) {
+  highwayOn = on;
+  highwayDemo();
+  highwayView!.setEnabled(on);
+  scene.frameHighway(on);
+  if (!on) stopRide();
+  $('highway-panel').hidden = !on;
+  document.body.classList.toggle('highway', on);
+}
+
+let ridingCar: string | null = null;
+
+function stopRide() {
+  ridingCar = null;
+  scene.followPose(null);
+  $('hw-ride').setAttribute('aria-pressed', 'false');
+}
+
+$('hw-ride').addEventListener('click', () => {
+  if (ridingCar) return stopRide();
+  ridingCar = highwayDemo().pickCar();
+  if (!ridingCar) return;
+  scene.followPose(() => highwayView!.pose(ridingCar!));
+  $('hw-ride').setAttribute('aria-pressed', 'true');
+});
+
+function showHighway() {
+  if (!highwayOn || !highway) return;
+  const { live, baseline, reportingShare } = highway.stats();
+  const trip = (s: number | null) => (s === null ? 'No data' : `${Math.round(s)} s`);
+  $('highway-title').textContent = `Highway, ${HIGHWAY_MODES[highway.settings.mode].label}, ${highway.settings.limitMph} mph`;
+  $('hw-mph').textContent = `${Math.round(live.mph)} mph`;
+  $('hw-base-mph').textContent = `${Math.round(baseline.mph)} mph`;
+  $('hw-slow').textContent = `${Math.round(live.slowShare * 100)}%`;
+  $('hw-base-slow').textContent = `${Math.round(baseline.slowShare * 100)}%`;
+  $('hw-trip').textContent = trip(live.tripSeconds);
+  $('hw-base-trip').textContent = trip(baseline.tripSeconds);
+  $('hw-missed').textContent = String(live.missed);
+  $('hw-base-missed').textContent = String(baseline.missed);
+  const seen = reportingShare === null ? '' : ` Ramp cameras show TES can see ${Math.round(reportingShare * 100)}% of traffic.`;
+  $('hw-note').textContent = `Simulated. Blue cars are on TES. The band on the road shows speed.${seen}`;
+  if (ridingCar && !highway.sim.cars.some((c) => c.id === ridingCar && c.place === 'main')) stopRide();
+}
+setInterval(showHighway, 500);
 
 renderSystems($('systems-list'), systems, applySystem);
 
@@ -690,6 +814,50 @@ function openStreets() {
 const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
+  {
+    id: 'highway-off',
+    title: 'Highway rush hour, no TES',
+    description: 'Nobody knows where anyone is getting off. Drivers cut across lanes late and exit queues reach the mainline.',
+    watch: 'Red bands on the road show where traffic has broken down. Count the missed exits in the panel.',
+    run() {
+      setSystem('highwayScenario', 'rush');
+      setSystem('highwayTes', 'off');
+      setSystem('highway', true);
+    },
+  },
+  {
+    id: 'highway-on',
+    title: 'Highway rush hour, with TES',
+    description: 'The same drivers, on autopilot. TES knows every exit, so cars move over early and through traffic keeps the right lane clear.',
+    watch: 'The panel compares this run to the same drivers without TES. Press Ride along to see it from the road.',
+    run() {
+      setSystem('highwayScenario', 'rush');
+      setSystem('highwayTes', 'autopilot');
+      setSystem('highway', true);
+    },
+  },
+  {
+    id: 'highway-stadium',
+    title: 'Stadium exit, with TES',
+    description: 'Half the traffic wants one exit. TES knows everyone\'s destination and moves some to a quieter exit before the queue forms.',
+    watch: 'This is where knowing destinations helps most. Compare trip time and missed exits in the panel.',
+    run() {
+      setSystem('highwayScenario', 'stadium');
+      setSystem('highwayTes', 'autopilot');
+      setSystem('highway', true);
+    },
+  },
+  {
+    id: 'highway-cameras',
+    title: 'Only 30% share GPS',
+    description: 'Most drivers aren\'t on the network. Ramp cameras count everyone, which shows TES how much traffic it can\'t see.',
+    watch: 'Switch Highway TES between GPS only and plus cameras in Systems, using Stadium event traffic.',
+    run() {
+      setSystem('highwayScenario', 'stadium');
+      setSystem('highwayTes', 'cameras30');
+      setSystem('highway', true);
+    },
+  },
   {
     id: 'residents',
     title: 'Meet the residents',
@@ -1094,6 +1262,7 @@ scene.start((dt) => {
   readControls();
   readWalkKeys();
   world.tick(dt * timeScale);
+  if (highwayOn) highway?.tick(dt * timeScale);
   map.draw(twin, world, highlight, selectedId, route);
 });
 
@@ -1109,4 +1278,4 @@ showSelection();
 if (params.get('time')) setSystem('timeOfDay', params.get('time')!);
 
 // For scripted test runs.
-Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar } });
+Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway } });

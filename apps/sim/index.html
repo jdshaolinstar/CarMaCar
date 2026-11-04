@@ -55,6 +55,21 @@
       <p class="hint" id="place-hint" hidden>Click a stall on this map or in the city. Click a parked car's stall to remove it.</p>
     </section>
 
+    <section class="panel highway-panel" id="highway-panel" aria-label="Highway, live" hidden>
+      <h2 id="highway-title">Highway</h2>
+      <table>
+        <thead><tr><th scope="col"></th><th scope="col">This run</th><th scope="col">Same drivers, no TES</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Mainline speed</th><td id="hw-mph">0</td><td id="hw-base-mph">0</td></tr>
+          <tr><th scope="row">Cars below 30 mph</th><td id="hw-slow">0</td><td id="hw-base-slow">0</td></tr>
+          <tr><th scope="row">Recent trip time</th><td id="hw-trip">0</td><td id="hw-base-trip">0</td></tr>
+          <tr><th scope="row">Missed exits</th><td id="hw-missed">0</td><td id="hw-base-missed">0</td></tr>
+        </tbody>
+      </table>
+      <p class="caption" id="hw-note"></p>
+      <div class="tools"><button id="hw-ride" type="button" aria-pressed="false">Ride along</button></div>
+    </section>
+
     <section class="panel camera-panel" aria-label="Latest camera photo">
       <h2>What the camera saw</h2>
       <div class="frame" id="frame">

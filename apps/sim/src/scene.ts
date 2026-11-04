@@ -130,6 +130,7 @@ export class CityScene {
   private readonly facadeMaterials: StandardMaterial[] = [];
   private readonly nightLights: Mesh[] = [];
   private followedWalker: Walker | null = null;
+  private followedPose: (() => { x: number; y: number; z: number; tx: number; tz: number } | null) | null = null;
   private readonly walkerMeshes = new Map<string, InstancedMesh>();
   private readonly litterMeshes = new Map<string, InstancedMesh>();
   private litterTemplates!: Record<LitterKind, Mesh>;
@@ -862,7 +863,7 @@ export class CityScene {
     return mesh;
   }
 
-  private carTemplate(variant: number, hex: string): Mesh {
+  carTemplate(variant: number, hex: string): Mesh {
     const key = `${variant}${hex}`;
     const existing = this.templates.get(key);
     if (existing) return existing;
@@ -958,7 +959,27 @@ export class CityScene {
     this.scene.activeCamera = walker ? this.chase : this.followId ? this.chase : this.overview;
   }
 
+  /** Follows something outside the city world, such as a car on the highway. */
+  followPose(getPose: (() => { x: number; y: number; z: number; tx: number; tz: number } | null) | null) {
+    this.followedPose = getPose;
+    this.scene.activeCamera = getPose ? this.chase : this.overview;
+  }
+
+  /** Pulls the city view back far enough to see the whole highway, or returns to the town. */
+  frameHighway(on: boolean) {
+    this.overview.upperRadiusLimit = on ? 1100 : 460;
+    this.overview.radius = on ? 900 : 330;
+    this.overview.beta = on ? 0.62 : 0.5;
+    this.overview.target.set(on ? 0 : 30, 0, 0);
+  }
+
   private updateChase() {
+    const follow = this.followedPose?.();
+    if (follow) {
+      this.chase.position.set(follow.x - follow.tx * 11, follow.y + 4.4, follow.z - follow.tz * 11);
+      this.chase.setTarget(new Vector3(follow.x + follow.tx * 12, follow.y + 1.2, follow.z + follow.tz * 12));
+      return;
+    }
     const w = this.followedWalker;
     if (w) {
       const eye = add(w.pos, scale(w.heading, -4.4));

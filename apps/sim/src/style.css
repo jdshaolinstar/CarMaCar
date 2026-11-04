@@ -277,3 +277,14 @@ label { display: block; font-size: 14px; margin-bottom: 4px; }
 }
 
 [hidden] { display: none !important; }
+
+.highway-panel { position: fixed; top: 14px; right: 14px; width: min(460px, calc(100vw - 32px)); z-index: 6; }
+body.highway .camera-panel, body.highway .driver-panel { display: none; }
+.highway-panel h2 { margin-bottom: 6px; }
+.highway-panel table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.highway-panel th { font-weight: 600; color: var(--muted); font-size: 13px; text-align: left; padding: 2px 8px 2px 0; }
+.highway-panel thead th { text-align: right; }
+.highway-panel thead th:first-child { text-align: left; }
+.highway-panel td { text-align: right; font-size: 20px; font-weight: 800; padding: 1px 0 1px 8px; }
+.highway-panel td + td { color: var(--muted); font-weight: 600; }
+.highway-panel .tools { margin-top: 6px; }
