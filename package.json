@@ -1,0 +1,17 @@
+{
+  "name": "carmacar",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev:sim": "npm run dev -w apps/sim",
+    "dev:platform": "npm run dev -w apps/platform",
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p apps/platform --noEmit && tsc -p apps/sim --noEmit",
+    "test": "tsx --test packages/shared/test/*.test.ts apps/platform/test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}

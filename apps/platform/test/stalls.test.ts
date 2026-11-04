@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { pinhole, type CameraPose, type Stall } from '@carmacar/shared';
+import { Twin } from '../src/twin';
+import { generateCity } from '@carmacar/shared';
+import { analyzeFrame } from '../src/vision/stalls';
+import type { VehicleMask } from '../src/vision/provider';
+
+const stall = (id: string, cx: number): Stall => ({
+  id,
+  segmentId: 's',
+  center: { x: cx, z: 7.2 },
+  axis: { x: 1, z: 0 },
+  normal: { x: 0, z: 1 },
+  length: 6,
+  width: 2.4,
+  along: 0,
+});
+
+const stalls = [stall('S1', 8), stall('S2', 14), stall('S3', 20)];
+const pose: CameraPose = { position: [0, 1.4, 2.5], target: [16, 1.2, 7], fovY: 0.9, width: 1280, height: 720 };
+
+/** A filled mask whose bottom edge sits on the ground along a car's street side. */
+function carMask(id: string, x1: number, x2: number): VehicleMask {
+  const cam = pinhole(pose);
+  const a = cam.project([x1, 0, 6.1])!;
+  const b = cam.project([x2, 0, 6.1])!;
+  const left = Math.floor(Math.min(a[0], b[0]));
+  const right = Math.ceil(Math.max(a[0], b[0]));
+  const bottom = Math.ceil(Math.max(a[1], b[1]));
+  const top = bottom - 60;
+  const width = right - left;
+  const height = bottom - top;
+  const raster = new Uint8Array(width * height);
+  for (let col = 0; col < width; col++) {
+    const floor = Math.floor(a[1] + (b[1] - a[1]) * ((left + col - a[0]) / (b[0] - a[0] || 1)) - top);
+    for (let row = 0; row <= Math.min(floor, height - 1); row++) raster[row * width + col] = 1;
+  }
+  return { objectId: id, box: [left, top, right, bottom], raster, width, height, svgPath: '' };
+}
+
+test('a car in a stall marks that stall, and only that stall, occupied', () => {
+  const { observations, assignments } = analyzeFrame([carMask('1', 12, 16)], pose, stalls);
+  const byId = Object.fromEntries(observations.map((o) => [o.stallId, o.state]));
+  assert.equal(byId.S2, 'occupied');
+  assert.equal(assignments.get('1'), 'S2');
+  assert.notEqual(byId.S1, 'occupied');
+  assert.notEqual(byId.S3, 'occupied');
+});
+
+test('an empty view reports fully visible stalls as free', () => {
+  const { observations } = analyzeFrame([], pose, stalls);
+  assert.ok(observations.some((o) => o.state === 'free'));
+  assert.ok(observations.every((o) => o.state === 'free'));
+});
+
+test('stalls beyond trust range produce no observation', () => {
+  const far = [stall('FAR', 60)];
+  assert.equal(analyzeFrame([], pose, far).observations.length, 0);
+});
+
+test('the same input gives the same answer', () => {
+  const masks = [carMask('1', 12, 16)];
+  assert.deepEqual(analyzeFrame(masks, pose, stalls).observations, analyzeFrame(masks, pose, stalls).observations);
+});
+
+test('a stall flips on a new pass once old evidence fades', () => {
+  const city = generateCity();
+  const twin = new Twin(city);
+  const id = city.stalls[0].id;
+  const t0 = 1_000_000;
+  twin.observe([{ stallId: id, state: 'free', weight: 0.1 }], t0);
+  twin.observe([{ stallId: id, state: 'free', weight: 0.1 }], t0 + 1000);
+  assert.equal(twin.stall(id)?.state, 'free');
+  const changed = twin.observe([{ stallId: id, state: 'occupied', weight: 0.1 }], t0 + 40_000);
+  assert.equal(twin.stall(id)?.state, 'occupied');
+  assert.deepEqual(changed, [{ stallId: id, from: 'free', to: 'occupied' }]);
+});
+
+test('reservations stop two cars getting the same stall', () => {
+  const city = generateCity();
+  const twin = new Twin(city);
+  const d = city.destinations[0];
+  for (const s of city.stalls) twin.observe([{ stallId: s.id, state: 'free', weight: 0.1 }], Date.now());
+  const first = twin.findParking(d)!;
+  assert.ok(twin.reserve(first.stall.id, 'car1'));
+  const second = twin.findParking(d)!;
+  assert.notEqual(second.stall.id, first.stall.id);
+  assert.equal(twin.reserve(first.stall.id, 'car2'), false);
+});
