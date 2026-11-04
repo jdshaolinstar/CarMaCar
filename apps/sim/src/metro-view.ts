@@ -57,20 +57,20 @@ attribute float tone;
 uniform vec3 view;
 uniform vec2 aspect;
 uniform float size;
-varying float vTone;
+uniform vec3 colors[8];
+varying vec3 vColor;
 void main() {
   vec2 p = (position - view.xy) * view.z * aspect;
   gl_Position = vec4(p, 0.0, 1.0);
   gl_PointSize = size;
-  vTone = tone;
+  vColor = colors[int(tone + 0.5)];
 }`;
 const FRAGMENT = `
 precision mediump float;
-varying float vTone;
-uniform vec3 colors[8];
+varying vec3 vColor;
 uniform float alpha;
 void main() {
-  gl_FragColor = vec4(colors[int(vTone + 0.5)], alpha);
+  gl_FragColor = vec4(vColor, alpha);
 }`;
 
 class MapLayer {
@@ -101,6 +101,7 @@ class MapLayer {
     gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX));
     gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
     gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`The map could not start: ${gl.getProgramInfoLog(program)}`);
     gl.useProgram(program);
     this.program = program;
     // Each road gets its own two vertices, so it can have its own color.
@@ -385,7 +386,8 @@ async function main() {
   }
 
   function render(now: number) {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    // The first animation timestamp can be slightly earlier than the clock read above.
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
     if (playing) {
       time += dt * Number(speedInput.value) * PLAYBACK_RATE;
