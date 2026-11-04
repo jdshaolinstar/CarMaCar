@@ -159,6 +159,16 @@ The study also runs on other cities. Muse turned one sentence into a San Diego s
 
 To rerun it, see `apps/metro/scripts/`: `study.ts`, `algo-lab.ts`, `muse-city.ts` and `muse-summary.ts`. The source data is large and is not in the repo.
 
+## Real downtown Los Angeles in 3D
+
+The same system also runs on a real place. Open **Playbooks**, then **Real downtown Los Angeles, in 3D**.
+
+Streets, block sizes, building footprints and heights come from OpenStreetMap, around Broadway and 6th: Olive, Hill, Broadway and Spring, crossed by 5th, 6th and 7th. The grid is rotated to line up with the sim, and streets are straightened to their average line. Parking stalls and the garage are generated, because the map doesn't describe them, and buildings use our own materials.
+
+With no retuning, SAM read this city correctly: over 64 live frames at dusk, 98.0% of readings matched, across 148 of 435 stalls. That is one short run in rendered frames.
+
+A converter makes this from any area with a square street grid. See `apps/metro/scripts/pbf-block.py` and `real-block.ts`.
+
 ## Which parts are real
 
 | Part | Status |
@@ -174,6 +184,7 @@ To rerun it, see `apps/metro/scripts/`: `study.ts`, `algo-lab.ts`, `muse-city.ts
 | Ramp camera counts | Production in the live demo, on Meta SAM 3.1. Modeled at the measured rate in the offline study. |
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
 | Muse Lab | Production idea, run offline. Muse Spark writes the algorithms, and the Los Angeles simulator tests them. |
+| Real downtown Los Angeles | Simulation. Real streets and buildings. Stalls, garage and traffic are generated. |
 | Los Angeles study | Simulation. Real roads and Census commute flows, with modeled traffic. |
 | Graphics levels, weather, city sound | Display only. A pixel comparison at level 6 in rain showed no change in camera frames. |
 | Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |

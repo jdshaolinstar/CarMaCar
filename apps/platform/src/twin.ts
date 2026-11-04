@@ -63,7 +63,7 @@ export class Twin {
   private nextTrashId = 1;
   lastSeen = Date.now();
 
-  constructor(private readonly city: CityMap) {
+  constructor(readonly city: CityMap) {
     this.graph = new RoadGraph(city);
     this.tes = new TrafficEngine(city, this.graph);
     for (const s of city.stalls) {

@@ -57,9 +57,10 @@ function showStatus(text: string | null) {
 }
 
 // The demo town by default, or any city described in a file. See docs/PORTING.md.
-const cityFile = params.get('city');
+const place = /^[a-z0-9-]+$/.test(params.get('place') ?? '') ? params.get('place')! : undefined;
+const cityFile = params.get('city') ?? (place ? `cities/${place}.json` : null);
 const city: CityMap = cityFile ? await (await fetch(cityFile)).json() : generateCity();
-const platform = await PlatformClient.connect().catch((err: Error) => {
+const platform = await PlatformClient.connect(place).catch((err: Error) => {
   showStatus(`Can't reach the platform. Start it, then reload. (${err.message})`);
   return null;
 });
@@ -905,6 +906,13 @@ function openStreets() {
 const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
+  {
+    id: 'real-downtown',
+    title: 'Real downtown Los Angeles, in 3D',
+    description: 'Runs this same system on real streets and buildings from OpenStreetMap, around Broadway and 6th. Parking stalls and the garage are generated, and the traffic is simulated.',
+    watch: 'Real SAM reads cars in a place it was never set up for. Add ?gfx=6&time=night&weather=rain to the address for a rainy night.',
+    run: () => window.location.assign('?place=dtla&gfx=5'),
+  },
   {
     id: 'los-angeles',
     title: 'Los Angeles, one morning commute',

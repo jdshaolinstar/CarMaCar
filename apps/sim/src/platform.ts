@@ -31,8 +31,9 @@ export class PlatformClient implements ParkingService {
 
   private constructor(readonly sessionId: string) {}
 
-  static async connect(): Promise<PlatformClient> {
-    const res = await fetch(`${API}/v1/sessions`, { method: 'POST' });
+  /** `place` names a city the platform also knows, such as a real map area. */
+  static async connect(place?: string): Promise<PlatformClient> {
+    const res = await fetch(`${API}/v1/sessions`, place ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ place }) } : { method: 'POST' });
     if (!res.ok) throw new Error(`Platform refused a session (${res.status})`);
     const { sessionId } = await res.json();
     return new PlatformClient(sessionId);

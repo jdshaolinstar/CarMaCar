@@ -29,6 +29,11 @@ export type TimeOfDay = 'day' | 'dusk' | 'night';
 
 /** Everything on this layer is invisible to capture cameras, so overlays cannot leak into frames. */
 const OVERLAY_LAYER = 0x10000000;
+/** City view distance for the demo town, and that town's width. Larger cities scale from these. */
+const HOME_RADIUS = 330;
+const HOME_SPAN = 372;
+const UPPER_RADIUS_RATIO = 1.39;
+const SKYLINE_BETA = 0.95;
 const WORLD_LAYER = 0x0fffffff;
 /** Hidden from people by the garage level view. Capture cameras still see it. */
 const CAPTURE_ONLY_LAYER = 0x40000000;
@@ -118,6 +123,11 @@ export class CityScene {
   readonly engine: Engine;
   readonly scene: Scene;
   readonly overview: ArcRotateCamera;
+  /** How far back the city view sits, scaled so a larger city still fits. */
+  private get homeRadius() {
+    const { minX, maxX, minZ, maxZ } = this.city.bounds;
+    return HOME_RADIUS * Math.max(1, Math.max(maxX - minX, maxZ - minZ) / HOME_SPAN);
+  }
   private readonly chase: FreeCamera;
   private readonly capture: FreeCamera;
   private readonly shadows: ShadowGenerator;
@@ -180,7 +190,11 @@ export class CityScene {
 
     this.overview = new ArcRotateCamera('overview', -Math.PI / 2, 0.5, 330, new Vector3(30, 0, 0), this.scene);
     this.overview.lowerRadiusLimit = 40;
-    this.overview.upperRadiusLimit = 460;
+    this.overview.upperRadiusLimit = this.homeRadius * UPPER_RADIUS_RATIO;
+    this.overview.radius = this.homeRadius;
+    // Real skylines read better from an angle than straight down.
+    if (city.buildings) this.overview.beta = SKYLINE_BETA;
+    if (city.buildings) this.overview.target.set(0, 0, 0);
     this.overview.upperBetaLimit = 1.35;
     this.overview.wheelPrecision = 2;
     this.overview.panningSensibility = 12;
@@ -1082,8 +1096,8 @@ export class CityScene {
 
   /** Pulls the city view back far enough to see the whole highway, or returns to the town. */
   frameHighway(on: boolean) {
-    this.overview.upperRadiusLimit = on ? 1100 : 460;
-    this.overview.radius = on ? 900 : 330;
+    this.overview.upperRadiusLimit = on ? 1100 : this.homeRadius * UPPER_RADIUS_RATIO;
+    this.overview.radius = on ? 900 : this.homeRadius;
     this.overview.beta = on ? 0.62 : 0.5;
     this.overview.target.set(on ? 0 : 30, 0, 0);
   }

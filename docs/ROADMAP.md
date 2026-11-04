@@ -80,8 +80,10 @@ Goal: pick a location, such as downtown Los Angeles, and run the 3D sim on it.
   storing or republishing them is often limited.
 - Buildings are the easy part. Lanes, stalls, garages and camera positions are the hard part, and they need testing
   against SAM before any parking number carries over.
-- Hand-build one real block first. It then becomes the worked example for a Muse function that fills in a checked town
-  format from a plain request, with ordinary code building the roads.
+- Built: downtown Los Angeles, from OpenStreetMap, as a Playbook. SAM read it at 98.0% over 64 frames with no retuning.
+- Next: other cities, grids that aren't square, angled streets, and real garage entrances.
+- Next: a Muse function that fills in a checked layout from a plain request, with ordinary code building the roads. The
+  downtown layout is the worked example.
 
 ## Toward a GTA look
 

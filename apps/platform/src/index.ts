@@ -1,7 +1,7 @@
 // CarMaCar platform. Receives pixels and pose, keeps a live parking map, runs trip agents.
 // It imports nothing from the sim. Its only contact with the sim is this HTTP API.
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import cors from '@fastify/cors';
 import {
   distance,
@@ -58,15 +58,30 @@ const client = new OpenAI({ baseURL: 'https://api.meta.ai/v1', apiKey: process.e
 const vision: VisionProvider = new SamProvider(client);
 const spark = new SparkVision(client, AGENT_MODEL, (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN));
 // The demo town by default, or any city described in a file. See docs/PORTING.md.
-const city: CityMap = process.env.CITY_FILE ? JSON.parse(readFileSync(process.env.CITY_FILE, 'utf8')) : generateCity();
-const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
-const roadSegments = city.segments.map((s) => ({
-  id: s.id,
-  start: nodeById.get(s.a)!,
-  dir: s.dir,
-  length: s.length,
-  halfWidth: city.roadHalfWidth - 2.2, // Driving lanes only, not the parking lane.
-}));
+const defaultCity: CityMap = process.env.CITY_FILE ? JSON.parse(readFileSync(process.env.CITY_FILE, 'utf8')) : generateCity();
+
+/** Places a session can ask for, by name only. A browser can never point the server at a file. */
+const PLACE_FILES: Record<string, URL> = { dtla: new URL('../../sim/public/cities/dtla.json', import.meta.url) };
+const places = new Map<string, CityMap>();
+for (const [id, file] of Object.entries(PLACE_FILES)) {
+  if (existsSync(file)) places.set(id, JSON.parse(readFileSync(file, 'utf8')) as CityMap);
+}
+
+function roadsOf(city: CityMap) {
+  const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
+  return city.segments.map((s) => ({
+    id: s.id,
+    start: nodeById.get(s.a)!,
+    dir: s.dir,
+    length: s.length,
+    halfWidth: city.roadHalfWidth - 2.2, // Driving lanes only, not the parking lane.
+  }));
+}
+const roadCache = new Map<CityMap, ReturnType<typeof roadsOf>>();
+function roadSegmentsOf(city: CityMap) {
+  if (!roadCache.has(city)) roadCache.set(city, roadsOf(city));
+  return roadCache.get(city)!;
+}
 
 const sessions = new Map<string, Twin>();
 const inflight = new Map<string, number>();
@@ -135,7 +150,10 @@ await app.register(cors, { origin: process.env.ALLOWED_ORIGIN ?? true });
 
 app.get('/health', async () => ({ ok: true, sessions: sessions.size, model: vision.model }));
 
-app.post('/v1/sessions', async (_req, reply) => {
+app.post<{ Body?: { place?: string } }>('/v1/sessions', async (req, reply) => {
+  const place = req.body?.place;
+  const city = place ? places.get(place) : defaultCity;
+  if (!city) return reply.code(400).send({ error: 'Unknown place' });
   if (sessions.size >= MAX_SESSIONS) return reply.code(503).send({ error: 'Too many live sessions. Try again soon.' });
   const id = randomUUID();
   sessions.set(id, new Twin(city));
@@ -194,7 +212,8 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
     // The frame lives only in this buffer and is gone when the request ends. It is never stored.
     const readBySpark = twin.parkingVision === 'spark';
     const masks = readBySpark ? [] : await vision.findVehicles(pixels);
-    const analysis = analyzeFrame(masks, pose, city.stalls, roadSegments);
+    const { city } = twin;
+    const analysis = analyzeFrame(masks, pose, city.stalls, roadSegmentsOf(city));
     const observations = readBySpark ? await spark.readStalls(pixels, pose, city.stalls) : analysis.observations;
     const { assignments, roadVehicles } = analysis;
     for (const [segmentId, count] of roadVehicles) {
@@ -246,7 +265,7 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
 async function scanTrash(twin: Twin, pixels: Buffer, pose: CameraPose) {
   if (twin.trashScanBusy) return;
   twin.trashScanBusy = true;
-  const y = city.sidewalkHeight;
+  const y = twin.city.sidewalkHeight;
   const inView = (p: Vec2) => trashSpotInView(p, pose, y);
   try {
     let boxes: { box: [number, number, number, number]; category: string }[] = [];
@@ -284,7 +303,7 @@ function rerouteCar(twin: Twin, carId: string, takenStallId: string) {
     return;
   }
   const leg = trip.legs[0];
-  const destination = city.destinations.find((d) => d.id === leg.destinationId)!;
+  const destination = twin.city.destinations.find((d) => d.id === leg.destinationId)!;
   twin.addEvent({ tripId: trip.tripId, kind: 'tool_result', name: 'twin_update', detail: `Camera shows ${takenStallId} is now taken.` });
   twin.addEvent({ tripId: trip.tripId, kind: 'tool_call', name: 'find_parking', detail: JSON.stringify({ destination_id: leg.destinationId, exclude_stall_ids: [takenStallId] }) });
   const found = twin.findParking(destination, [takenStallId]);
@@ -310,7 +329,7 @@ app.get<{ Params: { id: string } }>('/v1/sessions/:id/twin', async (req, reply) 
 app.post<{ Params: { id: string }; Body: FindParkingRequest }>('/v1/sessions/:id/parking/find', async (req, reply) => {
   const twin = getTwin(req.params.id);
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
-  const destination = city.destinations.find((d) => d.id === req.body.destinationId);
+  const destination = twin.city.destinations.find((d) => d.id === req.body.destinationId);
   if (!destination) return reply.code(400).send({ error: 'Unknown destination' });
   const exclude = req.body.exclude ?? [];
   twin.tes.noteDemand(destination.name, Date.now() / 1000);
@@ -359,7 +378,7 @@ app.post<{ Params: { id: string }; Body: TripRequest }>('/v1/sessions/:id/trips'
   void runTripAgent(text, {
     client,
     model: AGENT_MODEL,
-    city,
+    city: twin.city,
     twin,
     trip,
     position,
@@ -407,7 +426,7 @@ app.post<{ Params: { id: string }; Body: OperatorRequest }>('/v1/sessions/:id/op
   if (!allowAgentCall(twin)) return reply.code(429).send({ error: 'Too many requests. Try again in a few minutes.' });
   const text = req.body.text?.trim();
   if (!text || text.length > 400) return reply.code(400).send({ error: 'Request must be 1 to 400 characters' });
-  void runOperator(text, { client, model: AGENT_MODEL, city, twin, onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN) });
+  void runOperator(text, { client, model: AGENT_MODEL, city: twin.city, twin, onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN) });
   return { ok: true };
 });
 
@@ -417,7 +436,7 @@ app.post<{ Params: { id: string }; Body: ResidentRequest }>('/v1/sessions/:id/re
   if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
   if (!allowAgentCall(twin)) return reply.code(429).send({ error: 'Too many requests. Try again in a few minutes.' });
   const { name, persona, lastPlace } = req.body;
-  const choice = await decideNextTrip(client, AGENT_MODEL, city, name, persona, lastPlace, (tokens) =>
+  const choice = await decideNextTrip(client, AGENT_MODEL, twin.city, name, persona, lastPlace, (tokens) =>
     addSpend(tokens * AGENT_USD_PER_TOKEN),
   ).catch(() => null);
   if (!choice) return reply.code(502).send({ error: 'Resident could not decide' });
@@ -428,4 +447,4 @@ app.post<{ Params: { id: string }; Body: ResidentRequest }>('/v1/sessions/:id/re
 app.addHook('onClose', async () => sessions.clear());
 
 await app.listen({ port: PORT, host: '0.0.0.0' });
-console.log(`platform on :${PORT} (${city.stalls.length} stalls, ${vision.model}, agent ${AGENT_MODEL}, ${distance(city.nodes[0], city.nodes[1]).toFixed(0)} m grid)`);
+console.log(`platform on :${PORT} (${defaultCity.stalls.length} stalls, ${places.size} extra places, ${vision.model}, agent ${AGENT_MODEL}, ${distance(defaultCity.nodes[0], defaultCity.nodes[1]).toFixed(0)} m grid)`);

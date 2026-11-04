@@ -33,6 +33,15 @@ CITY_FILE=my-city.json npx tsx --env-file=../../.env src/index.ts
 http://127.0.0.1:5173/?city=/my-city.json
 ```
 
+To build one from real map data, use the two scripts in `apps/metro/scripts/`:
+
+```bash
+python apps/metro/scripts/pbf-block.py <extract.osm.pbf> block.json <south> <west> <north> <east>
+node --import tsx apps/metro/scripts/real-block.ts block.json apps/sim/public/cities/my-city.json 4 4
+```
+
+It needs a square street grid and a named theater in the area. Add the file to `PLACE_FILES` in `apps/platform/src/index.ts`, then open `?place=my-city`. One platform can serve many places, and sessions ask for one by name.
+
 ## 2. The world: a 3D layer
 
 All rendering lives in `apps/sim/src/scene.ts`. Nothing else in the simulator touches Babylon.js, and `world.ts` is pure logic. To use higher-quality models, or another engine, replace that one file and keep this surface:
