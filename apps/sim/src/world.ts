@@ -19,6 +19,12 @@ import {
 } from '@carmacar/shared';
 import { movementOf, movementsConflict, Signals, type Movement } from './signals';
 
+/**
+ * How a car gets its route. Self-routed cars know nothing about traffic or parking. Autopilot follows
+ * the Traffic Efficiency System exactly. Guided cars get the same plan but a person may ignore it.
+ */
+export type NavMode = 'self' | 'guided' | 'autopilot';
+
 export type Role = 'parked' | 'scout' | 'network' | 'manual' | 'hero';
 type Phase = 'drive' | 'parkIn' | 'parked' | 'parkOut';
 type Mode = 'wander' | 'toStall' | 'cruise' | 'exit';
@@ -28,6 +34,11 @@ export interface Car {
   role: Role;
   variant: number;
   color: string;
+  nav: NavMode;
+  /** Reports its location to the Traffic Efficiency System. */
+  sharesGps: boolean;
+  /** Seconds before a stopped car reacts and moves off. */
+  startDelay: number;
   pos: Vec2;
   heading: Vec2;
   speed: number;
@@ -90,6 +101,8 @@ export interface ParkingService {
   release(carId: string): void;
   /** The driver is done with their reservation. This does not tell the platform the stall's state. */
   arrived(carId: string): void;
+  /** A recommended route, when the Traffic Efficiency System is on. */
+  route?(carId: string, from: DirectedEdge, goal: DirectedEdge): Promise<DirectedEdge[] | null>;
 }
 
 export interface ParkedRecord {
@@ -99,8 +112,19 @@ export interface ParkedRecord {
   walkMeters: number;
 }
 
+export interface DemandPlan {
+  guided?: number;
+  autopilot?: number;
+  /** Share of self-routed cars that still report GPS. */
+  gps?: number;
+  /** Send everyone to these places, for event surges. */
+  destinations?: string[];
+}
+
 export interface DemandItem {
   at: number;
+  nav: NavMode;
+  sharesGps: boolean;
   destinationId: string;
   startEdge: DirectedEdge;
   variant: number;
@@ -122,6 +146,11 @@ const COMFORT_BRAKING = 4;
 const HARD_BRAKING = 8;
 
 const CLAIM_MARGIN = 2;
+const GUIDED_COMPLIANCE = 0.85;
+/** People take a moment to move off. Automation does not, which is where it adds road capacity. */
+const HUMAN_START_DELAY = 0.9;
+const AUTOPILOT_START_DELAY = 0.15;
+const AUTOPILOT_FOLLOW_GAP = 5.6;
 const GARAGE_SPEED = 5;
 const GARAGE_LANE_OFFSET = 1.6;
 const GARAGE_MERGE_AHEAD = 8;
@@ -130,6 +159,7 @@ const PAD_REACH = 5;
 const LANDING_LENGTH = 6;
 /** Street traffic covers this in about 3 seconds, the time a car takes to pull out. */
 const MERGE_GAP = 36;
+const MERGE_LANDING = 8;
 const HUB_RADIUS = 9;
 const AISLE_CLEARANCE = 13;
 const PULL_OUT_GAP = 26;
@@ -176,6 +206,7 @@ export class World {
   readonly signals: Signals;
   /** Node id to the cars currently inside that intersection. */
   private readonly junctions = new Map<string, Set<string>>();
+  private activeCars: Car[] = [];
   /** Garage and level to the car currently crossing that hub. */
   private readonly hubTurns = new Map<string, string>();
   time = 0;
@@ -183,6 +214,10 @@ export class World {
   keepCarsInCity = false;
   /** Share of cars that use the parking network. */
   networkShare = 0.7;
+  /** Share of cars on autopilot. Comes on top of networkShare, which is guided cars. */
+  autopilotShare = 0;
+  /** Share of self-routed cars that report GPS anyway. */
+  gpsShare = 0;
   /** System switch: new background drivers and cars pulling out. */
   driversEnabled = true;
   /** System switch: the platform directs network cars to stalls. */
@@ -195,12 +230,19 @@ export class World {
   constructor(
     readonly city: CityMap,
     seed: number,
-    private readonly parking: ParkingService | null,
+    private parking: ParkingService | null,
   ) {
     this.graph = new RoadGraph(city);
     this.signals = new Signals(city);
     this.stalls = new Map(city.stalls.map((s) => [s.id, s]));
     this.rng = makeRng(seed);
+  }
+
+  private rollNav(): NavMode {
+    if (!this.guidance) return 'self';
+    const roll = this.rng();
+    if (roll < this.autopilotShare) return 'autopilot';
+    return roll < this.autopilotShare + this.networkShare ? 'guided' : 'self';
   }
 
   private parkedSeconds() {
@@ -221,6 +263,9 @@ export class World {
       role,
       variant,
       color,
+      nav: 'self',
+      sharesGps: false,
+      startDelay: 0,
       pos,
       heading: this.graph.edgeDir(edge),
       speed: 0,
@@ -310,6 +355,10 @@ export class World {
     return ids;
   }
 
+  setParking(service: ParkingService) {
+    this.parking = service;
+  }
+
   /** Adds or removes survey cars to reach a count. */
   setScoutCount(count: number) {
     const scouts = [...this.cars.values()].filter((c) => c.role === 'scout');
@@ -328,27 +377,46 @@ export class World {
     this.demand = [...items].sort((a, b) => a.at - b.at);
   }
 
-  /** Same seed, same drivers: the only thing that differs between runs is who is on the network. */
-  static makeDemand(city: CityMap, seed: number, count: number, spanSeconds: number, networkShare: number): DemandItem[] {
+  /** Same seed, same drivers: the only thing that differs between runs is how they navigate. */
+  static makeDemand(city: CityMap, seed: number, count: number, spanSeconds: number, plan: DemandPlan | number): DemandItem[] {
+    const shares: DemandPlan = typeof plan === 'number' ? { guided: plan } : plan;
     const rng = makeRng(seed);
     const items: DemandItem[] = [];
+    const destinations = shares.destinations?.length
+      ? shares.destinations.map((id) => city.destinations.find((d) => d.id === id)!)
+      : city.destinations;
     for (let i = 0; i < count; i++) {
       const seg = city.segments[Math.floor(rng() * city.segments.length)];
+      const at = rng() * spanSeconds;
+      const destination = destinations[Math.floor(rng() * destinations.length)];
+      const startEdge = rng() < 0.5 ? { from: seg.a, to: seg.b } : { from: seg.b, to: seg.a };
+      const variant = Math.floor(rng() * 4);
+      const color = CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
+      // Drawn every time, so changing a share changes only that car's mode.
+      const navRoll = rng();
+      const gpsRoll = rng();
+      const autopilot = shares.autopilot ?? 0;
+      const guided = shares.guided ?? 0;
+      const nav: NavMode = navRoll < autopilot ? 'autopilot' : navRoll < autopilot + guided ? 'guided' : 'self';
       items.push({
-        at: rng() * spanSeconds,
-        destinationId: city.destinations[Math.floor(rng() * city.destinations.length)].id,
-        startEdge: rng() < 0.5 ? { from: seg.a, to: seg.b } : { from: seg.b, to: seg.a },
-        variant: Math.floor(rng() * 4),
-        color: CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)],
-        onNetwork: rng() < networkShare,
+        at,
+        destinationId: destination.id,
+        startEdge,
+        variant,
+        color,
+        nav,
+        sharesGps: nav !== 'self' || gpsRoll < (shares.gps ?? 0),
+        onNetwork: nav !== 'self',
       });
     }
     return items;
   }
 
   private spawnDriver(item: DemandItem) {
-    const onNetwork = this.keepCarsInCity ? this.rng() < this.networkShare : item.onNetwork;
-    const car = this.blankCar(onNetwork ? 'network' : 'manual', item.startEdge, item.variant, item.color);
+    const nav = this.keepCarsInCity ? this.rollNav() : item.nav;
+    const car = this.blankCar(nav === 'self' ? 'manual' : 'network', item.startEdge, item.variant, item.color);
+    car.nav = nav;
+    car.sharesGps = this.keepCarsInCity ? nav !== 'self' || this.rng() < this.gpsShare : item.sharesGps;
     car.destinationId = item.destinationId;
     car.mode = 'cruise';
     if (item.onNetwork) this.requestParking(car);
@@ -433,6 +501,7 @@ export class World {
     car.s = 0;
     car.endsAtStall = false;
     this.pendingEdge.set(car.id, next);
+    this.askForRoute(car, next);
     if (this.signals.has(car.edge.to)) {
       const stopAlong = this.graph.edgeLength(car.edge) - this.graph.corner - STOP_LINE_SETBACK;
       car.stopS = Math.max(0, stopAlong - car.startAlong);
@@ -441,6 +510,21 @@ export class World {
   }
 
   private readonly pendingEdge = new Map<string, DirectedEdge>();
+
+  /** Connected cars re-check their route at every corner, from the street they are turning onto. */
+  private askForRoute(car: Car, from: DirectedEdge) {
+    const stall = car.targetStallId ? this.stalls.get(car.targetStallId) : null;
+    if (!stall || car.nav === 'self' || !this.guidance || !this.parking?.route) return;
+    const goal = this.graph.approachEdge(stall);
+    if (goal.from === from.from && goal.to === from.to) return;
+    void this.parking.route(car.id, from, goal).then((chain) => {
+      const committed = this.pendingEdge.get(car.id);
+      if (!chain || !committed || committed.from !== from.from || committed.to !== from.to) return;
+      // A person sometimes knows better, or just misses the turn. Autopilot never does.
+      if (car.nav === 'guided' && this.rng() > GUIDED_COMPLIANCE) return;
+      car.queue = chain.slice(1);
+    });
+  }
 
   private finishPath(car: Car) {
     this.leaveJunction(car);
@@ -574,7 +658,9 @@ export class World {
 
   /** A car that has finished one trip picks another, so the city keeps moving. */
   private startNewTrip(car: Car) {
-    car.role = this.rng() < this.networkShare ? 'network' : 'manual';
+    car.nav = this.rollNav();
+    car.sharesGps = car.nav !== 'self' || this.rng() < this.gpsShare;
+    car.role = car.nav === 'self' ? 'manual' : 'network';
     car.destinationId = this.pick(this.city.destinations).id;
     car.mode = 'cruise';
     car.spawnedAt = this.time;
@@ -742,8 +828,28 @@ export class World {
       if (holder === car.id) this.hubTurns.delete(key);
       return true;
     }
-    if (holder && holder !== car.id && this.cars.has(holder)) return false;
+    // A holder that has parked or left no longer needs the hub.
+    const holderCar = holder && holder !== car.id ? this.cars.get(holder) : null;
+    if (holderCar?.phase === 'drive') return false;
     this.hubTurns.set(key, car.id);
+    return true;
+  }
+
+  /**
+   * Whether a car at a garage door can pull out. Only traffic in the lane it is joining counts:
+   * moving cars on their way, or anything sitting right where it would land. Stopped cars further
+   * back must not count, because they may be queuing to come in, and each side would wait forever.
+   */
+  private mergeClear(car: Car): boolean {
+    const point = car.waitingToMerge!;
+    const dir = this.graph.edgeDir(car.edge);
+    for (const other of this.activeCars) {
+      if (other === car || other.level !== 0 || (other.insideGarage && !other.merging)) continue;
+      const rel = sub(other.pos, point);
+      if (Math.abs(rel.x * dir.z - rel.z * dir.x) > 2.5) continue;
+      const along = dot(rel, dir);
+      if (Math.abs(along) < MERGE_LANDING || (other.speed > 1 && along > -MERGE_GAP && along < 0)) return false;
+    }
     return true;
   }
 
@@ -927,8 +1033,8 @@ export class World {
     const path = car.path;
     // A merging car has priority. If both sides yielded they would wait on each other forever.
     if (!path || car.merging) return Infinity;
-    const nearby = [...this.cars.values()].filter(
-      (other) => other !== car && other.phase !== 'parked' && other.level === car.level && distance(other.pos, car.pos) < GAP_LOOKAHEAD + 5,
+    const nearby = this.activeCars.filter(
+      (other) => other !== car && other.level === car.level && Math.abs(other.pos.x - car.pos.x) < GAP_LOOKAHEAD + 5 && Math.abs(other.pos.z - car.pos.z) < GAP_LOOKAHEAD + 5,
     );
     if (nearby.length === 0) return Infinity;
     const end = path.sample(path.length);
@@ -985,12 +1091,20 @@ export class World {
 
   tick(dt: number) {
     this.time += dt;
-    while (this.driversEnabled && this.demand.length > 0 && this.demand[0].at <= this.time) {
-      const item = this.demand[0];
-      // Join the road only where there is room. Otherwise wait for the next tick.
-      if (!this.laneClear(this.graph.lanePoint(item.startEdge, this.graph.corner), 9)) break;
-      this.spawnDriver(this.demand.shift()!);
+    this.signals.tick(this.time);
+    // Each driver joins the road only where there is room. One blocked spot must not hold up the rest.
+    if (this.driversEnabled) {
+      for (let i = 0; i < this.demand.length && this.demand[i].at <= this.time; i++) {
+        const item = this.demand[i];
+        if (!this.laneClear(this.graph.lanePoint(item.startEdge, this.graph.corner), 9)) continue;
+        this.demand.splice(i, 1);
+        i--;
+        this.spawnDriver(item);
+      }
     }
+
+    // Parked cars are most of the city and never block a lane, so traffic checks skip them.
+    this.activeCars = [...this.cars.values()].filter((c) => c.phase !== 'parked');
 
     this.scanTimer -= dt;
     const scanning = this.scanTimer <= 0;
@@ -1043,7 +1157,7 @@ export class World {
         continue;
       }
       if (car.waitingToMerge) {
-        if (!this.laneClear(car.waitingToMerge, MERGE_GAP, car)) {
+        if (!this.mergeClear(car)) {
           car.speed = 0;
           continue;
         }
@@ -1062,7 +1176,8 @@ export class World {
       // Drivers slow down when they near their spot, which also gives cameras time to look at it.
       const nearingStall = car.endsAtStall && path.length - car.s < APPROACH_DISTANCE;
       let limit = car.insideGarage ? GARAGE_SPEED : nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
-      limit = Math.min(limit, brakingSpeed(this.gapAhead(car) - FOLLOW_GAP));
+      const followGap = car.nav === 'autopilot' ? AUTOPILOT_FOLLOW_GAP : FOLLOW_GAP;
+      limit = Math.min(limit, brakingSpeed(this.gapAhead(car) - followGap));
 
       const toStopLine = car.stopS - car.s;
       if (!car.junction && toStopLine < STOP_LOOKAHEAD) {
@@ -1071,6 +1186,14 @@ export class World {
         const clear = this.mayEnterJunction(car, toStopLine);
         if (clear && atBrakingPoint) this.enterJunction(car);
         else if (!clear) limit = Math.min(limit, brakingSpeed(toStopLine));
+      }
+
+      if (car.speed < 0.2) {
+        if (limit < 0.5) car.startDelay = car.nav === 'autopilot' ? AUTOPILOT_START_DELAY : HUMAN_START_DELAY;
+        else if (car.startDelay > 0) {
+          car.startDelay -= dt;
+          limit = 0;
+        }
       }
 
       const change = limit - car.speed;

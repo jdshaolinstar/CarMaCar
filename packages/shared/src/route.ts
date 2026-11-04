@@ -81,8 +81,27 @@ export class RoadGraph {
     return this.approachEdge(stall).from === s.a ? stall.along : s.length - stall.along;
   }
 
-  /** Cheapest edge chain from `start` to `goal`, both included. No U-turns. */
-  route(start: DirectedEdge, goal: DirectedEdge): DirectedEdge[] {
+  /** Cost to reach every street from `start`, for comparing many destinations at once. */
+  secondsFrom(start: DirectedEdge, edgeCost: (edge: DirectedEdge) => number): Map<string, number> {
+    const best = new Map<string, number>([[edgeKey(start), 0]]);
+    const open: { edge: DirectedEdge; cost: number }[] = [{ edge: start, cost: 0 }];
+    while (open.length > 0) {
+      open.sort((a, b) => a.cost - b.cost);
+      const { edge, cost } = open.shift()!;
+      if (cost > (best.get(edgeKey(edge)) ?? Infinity)) continue;
+      for (const next of this.next(edge.to, edge.from)) {
+        const nextCost = cost + edgeCost(next);
+        if (nextCost < (best.get(edgeKey(next)) ?? Infinity)) {
+          best.set(edgeKey(next), nextCost);
+          open.push({ edge: next, cost: nextCost });
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Cheapest edge chain from `start` to `goal`, both included. No U-turns. Shortest by default. */
+  route(start: DirectedEdge, goal: DirectedEdge, edgeCost: (edge: DirectedEdge) => number = (e) => this.edgeLength(e)): DirectedEdge[] {
     const best = new Map<string, number>([[edgeKey(start), 0]]);
     const previous = new Map<string, DirectedEdge>();
     const open: { edge: DirectedEdge; cost: number }[] = [{ edge: start, cost: 0 }];
@@ -106,7 +125,7 @@ export class RoadGraph {
       }
       for (const nextEdge of this.next(edge.to, edge.from)) {
         const nextKey = edgeKey(nextEdge);
-        const nextCost = cost + this.edgeLength(nextEdge);
+        const nextCost = cost + edgeCost(nextEdge);
         if (nextCost < (best.get(nextKey) ?? Infinity) || (nextKey === edgeKey(start) && !previous.has(nextKey))) {
           best.set(nextKey, nextCost);
           previous.set(nextKey, edge);

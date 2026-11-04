@@ -1,14 +1,23 @@
 // Traffic lights and intersection right-of-way. Part of the simulated world, not the platform.
-import { dot, rightOf, type CityMap, type Vec2 } from '@carmacar/shared';
+import { dot, rightOf, type CityMap, type SignalAxis, type Vec2 } from '@carmacar/shared';
 
 export type LightState = 'green' | 'yellow' | 'red';
-export type SignalMode = 'fixed' | 'off';
+export type SignalMode = 'fixed' | 'smart' | 'off';
 
 const GREEN_SECONDS = 12;
 const YELLOW_SECONDS = 2.5;
 const ALL_RED_SECONDS = 1.5;
 const AXIS_SECONDS = GREEN_SECONDS + YELLOW_SECONDS + ALL_RED_SECONDS;
 const CYCLE_SECONDS = AXIS_SECONDS * 2;
+const MIN_GREEN_SECONDS = 7;
+const MAX_GREEN_SECONDS = 30;
+
+interface SmartLight {
+  axis: SignalAxis;
+  phase: 'green' | 'yellow' | 'allRed';
+  since: number;
+  wants: SignalAxis | null;
+}
 
 export interface Movement {
   entering: Vec2;
@@ -35,6 +44,7 @@ export class Signals {
   /** Nodes with lights. Corners have only one way through, so they need none. */
   readonly nodes: string[];
   private readonly offsets = new Map<string, number>();
+  private readonly smart = new Map<string, SmartLight>();
 
   constructor(city: CityMap) {
     const degree = new Map<string, number>();
@@ -44,11 +54,43 @@ export class Signals {
     }
     this.nodes = city.nodes.filter((n) => (degree.get(n.id) ?? 0) >= 3).map((n) => n.id);
     // Staggered starts, so the whole city does not change at once.
-    this.nodes.forEach((id, i) => this.offsets.set(id, (i * 5.5) % CYCLE_SECONDS));
+    this.nodes.forEach((id, i) => {
+      this.offsets.set(id, (i * 5.5) % CYCLE_SECONDS);
+      this.smart.set(id, { axis: i % 2 === 0 ? 'ew' : 'ns', phase: 'green', since: 0, wants: null });
+    });
   }
 
   has(nodeId: string) {
     return this.offsets.has(nodeId);
+  }
+
+  /** Smart mode: asks a light to favor a direction. It still runs safe yellow and all-red phases. */
+  request(nodeId: string, axis: SignalAxis) {
+    const light = this.smart.get(nodeId);
+    if (light) light.wants = axis === light.axis ? null : axis;
+  }
+
+  /** Advances smart lights. Fixed lights are a pure function of time. */
+  tick(time: number) {
+    if (this.mode !== 'smart') return;
+    for (const light of this.smart.values()) {
+      const held = time - light.since;
+      if (light.phase === 'green') {
+        const shouldChange = (light.wants && held >= MIN_GREEN_SECONDS) || held >= MAX_GREEN_SECONDS;
+        if (shouldChange) {
+          light.phase = 'yellow';
+          light.since = time;
+        }
+      } else if (light.phase === 'yellow' && held >= YELLOW_SECONDS) {
+        light.phase = 'allRed';
+        light.since = time;
+      } else if (light.phase === 'allRed' && held >= ALL_RED_SECONDS) {
+        light.axis = light.axis === 'ew' ? 'ns' : 'ew';
+        light.phase = 'green';
+        light.since = time;
+        light.wants = null;
+      }
+    }
   }
 
   /** The light facing a car travelling in `direction`. */
@@ -56,8 +98,13 @@ export class Signals {
     if (this.mode === 'off') return 'green';
     const offset = this.offsets.get(nodeId);
     if (offset === undefined) return 'green';
-    const t = (time + offset) % CYCLE_SECONDS;
     const eastWest = Math.abs(direction.x) > Math.abs(direction.z);
+    if (this.mode === 'smart') {
+      const light = this.smart.get(nodeId)!;
+      if ((light.axis === 'ew') !== eastWest || light.phase === 'allRed') return 'red';
+      return light.phase === 'green' ? 'green' : 'yellow';
+    }
+    const t = (time + offset) % CYCLE_SECONDS;
     const local = eastWest ? t : (t + AXIS_SECONDS) % CYCLE_SECONDS;
     if (local < GREEN_SECONDS) return 'green';
     if (local < GREEN_SECONDS + YELLOW_SECONDS) return 'yellow';
