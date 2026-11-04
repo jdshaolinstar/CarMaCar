@@ -18,8 +18,9 @@ import {
   Texture,
   Vector3,
   Vector4,
+  VertexData,
 } from '@babylonjs/core';
-import { add, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
+import { add, pointOnRing, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
 import type { LightState } from './signals';
 import { LIFT_SECONDS, type Car, type LitterKind, type World } from './world';
 
@@ -42,11 +43,39 @@ const STATE_COLOR: Record<StallState, Color3> = {
   unknown: Color3.FromHexString('#8D969C'),
 };
 
-const VARIANTS = [
-  { length: 4.4, width: 1.8, deck: 0.92, cabin: 0.58, cabinLength: 2.3, cabinOffset: -0.15 },
-  { length: 3.9, width: 1.75, deck: 0.95, cabin: 0.62, cabinLength: 2.2, cabinOffset: -0.45 },
-  { length: 4.7, width: 1.95, deck: 1.1, cabin: 0.72, cabinLength: 2.9, cabinOffset: -0.35 },
-  { length: 5.0, width: 1.95, deck: 1.2, cabin: 0.95, cabinLength: 3.9, cabinOffset: -0.45 },
+const VARIANTS: { width: number; length: number; profile: [number, number][]; glass: number[]; windows: [number, number][] }[] = [
+  // Sedan
+  {
+    width: 1.8,
+    length: 4.4,
+    profile: [[2.2, 0.32], [2.2, 0.66], [2.05, 0.74], [0.98, 0.86], [0.3, 1.34], [-0.95, 1.36], [-1.72, 0.94], [-2.2, 0.88], [-2.2, 0.32]],
+    glass: [3, 5],
+    windows: [[0.85, 0.9], [0.28, 1.28], [-0.92, 1.3], [-1.55, 0.94]],
+  },
+  // Hatchback
+  {
+    width: 1.75,
+    length: 3.9,
+    profile: [[1.95, 0.32], [1.95, 0.68], [1.8, 0.78], [0.95, 0.9], [0.3, 1.42], [-1.45, 1.42], [-1.92, 0.92], [-1.95, 0.32]],
+    glass: [3, 5],
+    windows: [[0.8, 0.94], [0.28, 1.36], [-1.4, 1.36], [-1.75, 0.96]],
+  },
+  // SUV
+  {
+    width: 1.95,
+    length: 4.7,
+    profile: [[2.35, 0.42], [2.35, 0.84], [2.15, 0.98], [1.2, 1.08], [0.65, 1.72], [-1.95, 1.74], [-2.3, 1.08], [-2.35, 0.42]],
+    glass: [3, 5],
+    windows: [[1.05, 1.12], [0.62, 1.64], [-1.88, 1.66], [-2.12, 1.12]],
+  },
+  // Van
+  {
+    width: 1.95,
+    length: 5.0,
+    profile: [[2.5, 0.4], [2.5, 0.92], [2.3, 1.1], [1.7, 1.24], [1.1, 2.0], [-2.45, 2.02], [-2.5, 0.4]],
+    glass: [3],
+    windows: [[1.55, 1.3], [1.08, 1.92], [0.2, 1.92], [0.2, 1.3]],
+  },
 ];
 
 function facadeTexture(scene: Scene, wall: string, glass: string): DynamicTexture {
@@ -156,6 +185,7 @@ export class CityScene {
     this.buildBuildingLabels();
     this.buildSignals();
     this.buildPeopleAndLitter();
+    this.buildStreetLife();
   }
 
   private garageAt(x0: number, x1: number, z0: number, z1: number) {
@@ -404,6 +434,69 @@ export class CityScene {
     }
   }
 
+  /** Crosswalks, trees and street lamps, the things that make a street read as a street. */
+  private buildStreetLife() {
+    const paint = this.solid('#e9e9e4');
+    const stripes: Mesh[] = [];
+    const { graph, signals } = this.world;
+    for (const nodeId of signals.nodes) {
+      for (const out of graph.next(nodeId)) {
+        const dir = graph.edgeDir(out);
+        const across = rightOf(dir);
+        const base = add(graph.node(nodeId), scale(dir, graph.corner - 0.8));
+        for (let i = -4; i <= 4; i++) {
+          const spot = add(base, scale(across, i * 1.3));
+          const stripe = MeshBuilder.CreateGround('crosswalk', { width: 0.6, height: 2.2 }, this.scene);
+          stripe.position.set(spot.x, 0.025, spot.z);
+          stripe.rotation.y = Math.atan2(dir.x, dir.z);
+          stripe.bakeCurrentTransformIntoVertices();
+          stripes.push(stripe);
+        }
+      }
+    }
+    const crosswalks = Mesh.MergeMeshes(stripes, true, true)!;
+    crosswalks.material = paint;
+    crosswalks.isPickable = false;
+    crosswalks.receiveShadows = true;
+
+    const trunk = this.solid('#5d4632');
+    const leaf = this.solid('#3f7d46');
+    const metal = this.solid('#3a3f44');
+    const treeParts: Mesh[] = [];
+    const lampParts: Mesh[] = [];
+    const y = this.city.sidewalkHeight;
+    const spots: { pos: Vec2; tree: boolean }[] = [];
+    for (const ring of this.city.sidewalks) {
+      for (let s = 9, i = 0; s < ring.length - 4; s += 14, i++) {
+        spots.push({ pos: pointOnRing(ring, s, -0.95), tree: i % 3 !== 2 });
+      }
+    }
+    for (const { pos, tree } of spots) {
+      if (tree) {
+        const bole = MeshBuilder.CreateCylinder('trunk', { diameterTop: 0.16, diameterBottom: 0.26, height: 2.4, tessellation: 6 }, this.scene);
+        bole.position.set(pos.x, y + 1.2, pos.z);
+        bole.material = trunk;
+        treeParts.push(bole);
+        const crown = MeshBuilder.CreateIcoSphere('crown', { radius: 1.5, subdivisions: 1, flat: true }, this.scene);
+        crown.position.set(pos.x, y + 3.5, pos.z);
+        crown.scaling.y = 1.15;
+        crown.material = leaf;
+        treeParts.push(crown);
+      } else {
+        const pole = MeshBuilder.CreateCylinder('lamp', { diameterTop: 0.09, diameterBottom: 0.16, height: 5.5, tessellation: 6 }, this.scene);
+        pole.position.set(pos.x, y + 2.75, pos.z);
+        pole.material = metal;
+        lampParts.push(pole);
+      }
+    }
+    for (const parts of [treeParts, lampParts]) {
+      if (parts.length === 0) continue;
+      const merged = Mesh.MergeMeshes(parts, true, true, undefined, false, true)!;
+      merged.isPickable = false;
+      this.shadows.addShadowCaster(merged);
+    }
+  }
+
   private buildBuildings() {
     const palettes = [
       ['#8d6e63', '#2a3440'],
@@ -642,33 +735,93 @@ export class CityScene {
     }
   }
 
+  /** A car body built from a side profile, which gives real shapes rather than stacked boxes. */
+  private carBody(profile: [number, number][], glassEdges: number[], windows: [number, number][], width: number, paint: Color4, glass: Color4): Mesh {
+    const half = width / 2;
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const indices: number[] = [];
+    const push = (x: number, y: number, z: number, c: Color4) => {
+      positions.push(x, y, z);
+      colors.push(c.r, c.g, c.b, 1);
+      return positions.length / 3 - 1;
+    };
+    const quad = (a: number, b: number, c: number, d: number) => indices.push(a, b, c, a, c, d);
+    // Skin across the top, front and back.
+    profile.forEach(([z0, y0], i) => {
+      const [z1, y1] = profile[(i + 1) % profile.length];
+      const color = glassEdges.includes(i) ? glass : paint;
+      quad(push(-half, y0, z0, color), push(-half, y1, z1, color), push(half, y1, z1, color), push(half, y0, z0, color));
+    });
+    // Both sides, as fans from the middle of the shape.
+    const cz = profile.reduce((t, p) => t + p[0], 0) / profile.length;
+    const cy = profile.reduce((t, p) => t + p[1], 0) / profile.length;
+    for (const side of [-1, 1]) {
+      const x = side * half;
+      const center = push(x, cy, cz, paint);
+      profile.forEach(([z0, y0], i) => {
+        const [z1, y1] = profile[(i + 1) % profile.length];
+        const a = push(x, y0, z0, paint);
+        const b = push(x, y1, z1, paint);
+        if (side > 0) indices.push(center, b, a);
+        else indices.push(center, a, b);
+      });
+      // Side windows sit just proud of the door.
+      const wx = side * (half + 0.012);
+      const wc = windows.reduce((t, p) => [t[0] + p[0] / windows.length, t[1] + p[1] / windows.length], [0, 0]);
+      const wCenter = push(wx, wc[1], wc[0], glass);
+      windows.forEach(([z0, y0], i) => {
+        const [z1, y1] = windows[(i + 1) % windows.length];
+        const a = push(wx, y0, z0, glass);
+        const b = push(wx, y1, z1, glass);
+        if (side > 0) indices.push(wCenter, b, a);
+        else indices.push(wCenter, a, b);
+      });
+    }
+    const mesh = new Mesh('car-body', this.scene);
+    const data = new VertexData();
+    data.positions = positions;
+    data.indices = indices;
+    data.colors = colors;
+    const normals: number[] = [];
+    VertexData.ComputeNormals(positions, indices, normals);
+    data.normals = normals;
+    // Unused, but merging needs every part to carry the same attributes.
+    data.uvs = new Array((positions.length / 3) * 2).fill(0);
+    data.applyToMesh(mesh);
+    return mesh;
+  }
+
   private carTemplate(variant: number, hex: string): Mesh {
     const key = `${variant}${hex}`;
     const existing = this.templates.get(key);
     if (existing) return existing;
     const v = VARIANTS[variant % VARIANTS.length];
     const paint = Color3.FromHexString(hex).toColor4();
-    const glass = Color3.FromHexString('#1f2933').toColor4();
-    const dark = Color3.FromHexString('#16181a').toColor4();
+    const glass = Color3.FromHexString('#16202a').toColor4();
+    const dark = Color3.FromHexString('#141618').toColor4();
     const lamp = Color3.FromHexString('#fff3c4').toColor4();
     const tail = Color3.FromHexString('#b3261e').toColor4();
-    const parts: Mesh[] = [];
+    const parts: Mesh[] = [this.carBody(v.profile, v.glass, v.windows, v.width, paint, glass)];
     const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: Color4) => {
       const b = MeshBuilder.CreateBox('part', { width: w, height: h, depth: d, faceColors: Array(6).fill(color) }, this.scene);
       b.position.set(x, y, z);
+      b.bakeCurrentTransformIntoVertices();
       parts.push(b);
     };
-    const bodyHeight = v.deck - 0.31;
-    box(v.width, bodyHeight, v.length, 0, 0.31 + bodyHeight / 2, 0, paint);
-    box(v.width * 0.9, v.cabin, v.cabinLength, 0, v.deck + v.cabin / 2, v.cabinOffset, glass);
-    box(v.width * 0.86, 0.08, v.cabinLength * 0.92, 0, v.deck + v.cabin + 0.04, v.cabinOffset, paint);
+    const frontZ = v.profile[0][0];
+    const rearZ = v.profile[v.profile.length - 1][0];
+    const lampY = v.profile[1][1] - 0.14;
+    box(v.width * 0.96, 0.16, 0.08, 0, 0.42, frontZ + 0.02, dark);
+    box(v.width * 0.96, 0.16, 0.08, 0, 0.42, rearZ - 0.02, dark);
     for (const sx of [-1, 1]) {
-      box(0.32, 0.16, 0.05, sx * (v.width / 2 - 0.3), v.deck - 0.18, v.length / 2, lamp);
-      box(0.32, 0.16, 0.05, sx * (v.width / 2 - 0.3), v.deck - 0.18, -v.length / 2, tail);
-      for (const sz of [-1, 1]) {
-        const wheel = MeshBuilder.CreateCylinder('wheel', { diameter: 0.66, height: 0.24, tessellation: 14, faceColors: Array(3).fill(dark) }, this.scene);
+      box(0.36, 0.14, 0.05, sx * (v.width / 2 - 0.3), lampY, frontZ + 0.02, lamp);
+      box(0.36, 0.14, 0.05, sx * (v.width / 2 - 0.3), lampY, rearZ - 0.02, tail);
+      box(0.2, 0.1, 0.1, sx * (v.width / 2 + 0.08), v.windows[0][1] + 0.02, v.windows[0][0], dark);
+      for (const axle of [frontZ - 0.82, rearZ + 0.82]) {
+        const wheel = MeshBuilder.CreateCylinder('wheel', { diameter: 0.68, height: 0.24, tessellation: 16, faceColors: Array(3).fill(dark) }, this.scene);
         wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(sx * (v.width / 2 - 0.02), 0.33, sz * (v.length / 2 - 0.85));
+        wheel.position.set(sx * (v.width / 2 - 0.08), 0.34, axle);
         wheel.bakeCurrentTransformIntoVertices();
         parts.push(wheel);
       }

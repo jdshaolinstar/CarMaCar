@@ -94,6 +94,7 @@ Rules:
 - Use list_destinations to resolve place names. Never invent a destination.
 - Reserve a stall only for the first stop, because later stops may change by the time the driver gets there. Use stall_id null for later stops.
 - Parking data is live from street cameras. If find_parking returns nothing, plan the stop with stall_id null and say so honestly.
+- arrive_by is only for a time the driver must be there. "The movie ends at 3pm" is not an arrival time: set stay_minutes if you can work it out, otherwise leave both null and mention it in your reply.
 - If the driver changes their mind, build a new plan from their request. The current plan is given to you.
 - Finish by calling schedule_trip exactly once.`;
 
