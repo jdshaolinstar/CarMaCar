@@ -43,6 +43,8 @@ const MAX_INFLIGHT_PER_SESSION = 6;
 const MAX_SESSIONS = 40;
 const SESSION_IDLE_MS = 20 * 60_000;
 const STRATEGIST_SECONDS = 30;
+const AGENT_WINDOW_MS = 10 * 60_000;
+const AGENT_CALLS_PER_WINDOW = 40;
 const SAM_USD_PER_FRAME = 0.0025;
 // Tested on rendered frames: "garbage bag" found real trash with no false alarms. "litter" found nothing.
 const TRASH_CONCEPT = 'garbage bag';
@@ -79,6 +81,15 @@ function addSpend(usd: number) {
   spentUsd += usd;
 }
 const budgetExhausted = () => new Date().toDateString() === spendDay && spentUsd >= DAILY_BUDGET_USD;
+
+/** Agent calls cost money, so one visitor cannot use up the day's budget for everyone else. */
+function allowAgentCall(twin: Twin): boolean {
+  const now = Date.now();
+  twin.agentCallTimes = twin.agentCallTimes.filter((t) => now - t < AGENT_WINDOW_MS);
+  if (twin.agentCallTimes.length >= AGENT_CALLS_PER_WINDOW) return false;
+  twin.agentCallTimes.push(now);
+  return true;
+}
 
 function getTwin(id: string): Twin | undefined {
   const twin = sessions.get(id);
@@ -304,6 +315,7 @@ app.post<{ Params: { id: string }; Body: TripRequest }>('/v1/sessions/:id/trips'
   const twin = getTwin(req.params.id);
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  if (!allowAgentCall(twin)) return reply.code(429).send({ error: 'Too many requests. Try again in a few minutes.' });
   const { carId, text, position } = req.body;
   if (!text?.trim() || text.length > 400) return reply.code(400).send({ error: 'Trip request must be 1 to 400 characters' });
 
@@ -359,6 +371,7 @@ app.post<{ Params: { id: string }; Body: OperatorRequest }>('/v1/sessions/:id/op
   const twin = getTwin(req.params.id);
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  if (!allowAgentCall(twin)) return reply.code(429).send({ error: 'Too many requests. Try again in a few minutes.' });
   const text = req.body.text?.trim();
   if (!text || text.length > 400) return reply.code(400).send({ error: 'Request must be 1 to 400 characters' });
   void runOperator(text, { client, model: AGENT_MODEL, city, twin, onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN) });
@@ -369,6 +382,7 @@ app.post<{ Params: { id: string }; Body: ResidentRequest }>('/v1/sessions/:id/re
   const twin = getTwin(req.params.id);
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  if (!allowAgentCall(twin)) return reply.code(429).send({ error: 'Too many requests. Try again in a few minutes.' });
   const { name, persona, lastPlace } = req.body;
   const choice = await decideNextTrip(client, AGENT_MODEL, city, name, persona, lastPlace, (tokens) =>
     addSpend(tokens * AGENT_USD_PER_TOKEN),

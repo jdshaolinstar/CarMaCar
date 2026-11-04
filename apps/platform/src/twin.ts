@@ -54,6 +54,7 @@ export class Twin {
   strategist = false;
   trashScanBusy = false;
   strategistBusy = false;
+  agentCallTimes: number[] = [];
   strategistSummary: string | null = null;
   trashNote: string | null = null;
   cameraTrafficCounts = 0;
