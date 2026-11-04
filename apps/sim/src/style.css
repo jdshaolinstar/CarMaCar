@@ -126,6 +126,8 @@ h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .selected b { color: var(--line-white); font-weight: 600; }
 
 .tools { display: flex; gap: 6px; }
+.tool-link { display: inline-flex; align-items: center; padding: 6px 10px; border: 1px solid #59626a; border-radius: 4px; color: var(--line-white); font-size: 14px; font-weight: 600; text-decoration: none; }
+.tool-link:hover, .tool-link:focus-visible { background: var(--asphalt-raised); }
 .note { font-size: 13.5px; color: var(--lane-yellow); margin-bottom: 8px; }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
