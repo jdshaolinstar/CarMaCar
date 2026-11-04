@@ -11,12 +11,17 @@ const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') ?? 11);
 const scouts = Number(params.get('scouts') ?? 8);
 const drivers = Number(params.get('drivers') ?? 30);
-const networkShare = Number(params.get('network') ?? 0.7);
+const networkShare = Number(params.get('guided') ?? 0.4);
+const autopilotShare = Number(params.get('autopilot') ?? 0.3);
+const gpsShare = Number(params.get('gps') ?? 0.2);
 let framesPerSecond = Number(params.get('fps') ?? 1);
 const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
+let tesOn = true;
+let smartLightsOn = false;
+let lightsOn = true;
 let agentOn = true;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -35,10 +40,15 @@ const platform = await PlatformClient.connect().catch((err: Error) => {
 const world = new World(city, seed, platform);
 world.keepCarsInCity = true;
 world.networkShare = networkShare;
+world.autopilotShare = autopilotShare;
+world.gpsShare = gpsShare;
 world.populateParked(parkedShare);
 world.addScouts(scouts);
 const hero = world.addHero();
-world.setDemand(World.makeDemand(city, seed + 1, drivers, 300, networkShare));
+world.setDemand(World.makeDemand(city, seed + 1, drivers, 300, { guided: networkShare, autopilot: autopilotShare, gps: gpsShare }));
+if (platform) platform.edgeOf = (carId) => world.cars.get(carId)?.edge;
+hero.nav = 'guided';
+hero.sharesGps = true;
 
 const scene = new CityScene($('city') as HTMLCanvasElement, city, world);
 const map = new LiveMap($('map') as HTMLCanvasElement, city);
@@ -207,6 +217,8 @@ function updateStats() {
   $('stat-seen').textContent = `${seen} of ${city.stalls.length}`;
   $('stat-accuracy').textContent = seen ? `${Math.round((100 * matches) / seen)}%` : 'No data';
   $('stat-frames').textContent = String(twin.usage.frames);
+  $('stat-gps').textContent = String([...world.cars.values()].filter((c) => c.sharesGps && c.phase === 'drive').length);
+  $('stat-camera-cars').textContent = String(twin.cameraTrafficCounts);
   const total = readings.right + readings.falseFree.length + readings.falseTaken.length;
   $('stat-readings').textContent = total ? `${((100 * readings.right) / total).toFixed(1)}%` : 'No data';
   $('stat-karma').textContent = String(Object.values(twin.karma).reduce((sum, k) => sum + k, 0));
@@ -307,7 +319,9 @@ let selectedId: string = hero.id;
 let currentView: CameraView = 'city';
 
 function describeCar(car: Car): string {
-  const kind = { hero: 'Your car', scout: 'Survey car', network: 'Network driver', manual: 'Driver with no app', parked: 'Parked car' }[car.role];
+  const navText = { self: 'plots its own route', guided: 'TES guided', autopilot: 'TES autopilot' }[car.nav];
+  const roleText = { hero: 'Your car', scout: 'Survey car', network: 'Driver', manual: 'Driver', parked: 'Parked car' }[car.role];
+  const kind = `${roleText}, ${navText}${car.sharesGps ? ', sharing GPS' : ''}`;
   const place = city.destinations.find((d) => d.id === car.destinationId);
   return place ? `${kind}, heading to ${place.name}` : kind;
 }
@@ -368,12 +382,20 @@ const systems: SystemDef[] = [
     control: { type: 'range', value: framesPerSecond, min: 0.25, max: 3, step: 0.25, format: (v) => `${v}/s` },
   },
   {
-    id: 'guidance',
-    name: 'Parking guidance',
-    description: 'Reserves stalls and sends network cars to them.',
+    id: 'tes',
+    name: 'Traffic Efficiency System',
+    description: 'Plots a route and a stall for every connected car.',
     layer: 'production',
-    engine: 'Rules, no LLM',
+    engine: 'Routing code, with goals from Meta Muse Spark',
     control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'smartLights',
+    name: 'Smart traffic lights',
+    description: 'Lights favor the direction with the most cars.',
+    layer: 'production',
+    engine: 'Routing code, no LLM',
+    control: { type: 'toggle', value: false },
   },
   {
     id: 'agent',
@@ -401,11 +423,27 @@ const systems: SystemDef[] = [
   },
   {
     id: 'network',
-    name: 'Drivers on the network',
-    description: 'Share of drivers using CarMaCar. The rest search by eye.',
+    name: 'Guided cars',
+    description: 'Get a TES route, but a person may ignore it.',
+    layer: 'simulation',
+    engine: 'Scripted people, no AI',
+    control: { type: 'range', value: networkShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+  },
+  {
+    id: 'autopilot',
+    name: 'Autopilot cars',
+    description: 'Follow TES exactly. Tighter gaps, quicker starts.',
+    layer: 'simulation',
+    engine: 'Scripted self-driving stand-in',
+    control: { type: 'range', value: autopilotShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+  },
+  {
+    id: 'gps',
+    name: 'Other cars sharing GPS',
+    description: 'Self-routed cars that still report location. The rest only cameras can see.',
     layer: 'simulation',
     engine: 'Setting',
-    control: { type: 'range', value: networkShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+    control: { type: 'range', value: gpsShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
   },
   {
     id: 'lights',
@@ -425,22 +463,47 @@ const systems: SystemDef[] = [
   },
 ];
 
+function syncTes() {
+  world.signals.mode = !lightsOn ? 'off' : tesOn && smartLightsOn ? 'smart' : 'fixed';
+  platform?.setTes({ enabled: tesOn, smartLights: tesOn && smartLightsOn });
+}
+
+async function sendTelemetry() {
+  if (!platform || !tesOn) return;
+  const vehicles = [...world.cars.values()]
+    .filter((c) => c.sharesGps && c.phase === 'drive' && !c.insideGarage)
+    .map((c) => ({ carId: c.id, edge: c.edge, speed: c.speed }));
+  const reply = await platform.telemetry(vehicles).catch(() => null);
+  for (const [node, axis] of Object.entries(reply?.signals ?? {})) world.signals.request(node, axis);
+}
+setInterval(() => void sendTelemetry(), 1000);
+
 function applySystem(id: string, value: boolean | number | string) {
   if (id === 'vision') {
     visionOn = value as boolean;
     $('map-note').hidden = visionOn;
   } else if (id === 'garageCameras') garageVisionOn = value as boolean;
   else if (id === 'photoRate') framesPerSecond = value as number;
-  else if (id === 'guidance') world.guidance = value as boolean;
-  else if (id === 'agent') {
+  else if (id === 'tes') {
+    tesOn = value as boolean;
+    world.guidance = tesOn;
+    syncTes();
+  } else if (id === 'smartLights') {
+    smartLightsOn = value as boolean;
+    syncTes();
+  }  else if (id === 'agent') {
     agentOn = value as boolean;
     ($('trip-send') as HTMLButtonElement).disabled = !agentOn;
     $('agent-note').hidden = agentOn;
   } else if (id === 'scouts') world.setScoutCount(value as number);
   else if (id === 'drivers') world.driversEnabled = value as boolean;
   else if (id === 'network') world.networkShare = value as number;
-  else if (id === 'lights') world.signals.mode = value ? 'fixed' : 'off';
-  else if (id === 'speed') timeScale = value as number;
+  else if (id === 'autopilot') world.autopilotShare = value as number;
+  else if (id === 'gps') world.gpsShare = value as number;
+  else if (id === 'lights') {
+    lightsOn = value as boolean;
+    syncTes();
+  }  else if (id === 'speed') timeScale = value as number;
 }
 
 renderSystems($('systems-list'), systems, applySystem);
@@ -531,6 +594,15 @@ function updateNav() {
   }
 }
 setInterval(updateNav, 400);
+
+$('operator').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('operator-text') as HTMLInputElement;
+  const text = input.value.trim();
+  if (!text || !platform || !agentOn) return;
+  input.value = '';
+  if (!(await platform.askOperator(text))) showStatus('The city operator did not accept that request. Try again.');
+});
 
 $('trip').addEventListener('submit', async (e) => {
   e.preventDefault();

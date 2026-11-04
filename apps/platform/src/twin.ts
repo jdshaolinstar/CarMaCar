@@ -10,7 +10,7 @@ import type {
   TwinStall,
   Vec2,
 } from '@carmacar/shared';
-import { distance } from '@carmacar/shared';
+import { distance, RoadGraph, TrafficEngine } from '@carmacar/shared';
 import type { StallObservation } from './vision/stalls';
 
 /** Old evidence fades on this timescale, so a changed stall flips on the next pass. */
@@ -33,10 +33,17 @@ export class Twin {
   private readonly arrivedCars = new Set<string>();
   readonly trips = new Map<string, TripPlan>();
   readonly karma = new Map<string, number>();
+  readonly graph: RoadGraph;
+  readonly tes: TrafficEngine;
+  tesEnabled = true;
+  smartLights = false;
+  cameraTrafficCounts = 0;
   frameCount = 0;
   lastSeen = Date.now();
 
   constructor(private readonly city: CityMap) {
+    this.graph = new RoadGraph(city);
+    this.tes = new TrafficEngine(city, this.graph);
     for (const s of city.stalls) {
       this.state.set(s.id, { state: 'unknown', confidence: 0, updatedAt: null, reservedBy: null });
     }
@@ -123,6 +130,23 @@ export class Twin {
     return this.arrivedCars.has(carId);
   }
 
+  /** Is this stall free and unclaimed, as far as the map knows? */
+  available(stall: Stall, exclude: string[]) {
+    const t = this.state.get(stall.id)!;
+    return t.state === 'free' && !t.reservedBy && !exclude.includes(stall.id);
+  }
+
+  private trafficLevels(): Record<string, number> {
+    const now = Date.now() / 1000;
+    const levels: Record<string, number> = {};
+    for (const seg of this.city.segments) {
+      const free = seg.length / 11;
+      const worst = Math.max(this.tes.edgeSeconds({ from: seg.a, to: seg.b }, now), this.tes.edgeSeconds({ from: seg.b, to: seg.a }, now));
+      levels[seg.id] = +(worst / free).toFixed(2);
+    }
+    return levels;
+  }
+
   snapshot(frameLimit: number, budgetExhausted: boolean): TwinSnapshot {
     return {
       now: Date.now(),
@@ -132,6 +156,8 @@ export class Twin {
       trips: [...this.trips.values()],
       karma: Object.fromEntries(this.karma),
       usage: { frames: this.frameCount, frameLimit, budgetExhausted },
+      traffic: this.trafficLevels(),
+      cameraTrafficCounts: this.cameraTrafficCounts,
     };
   }
 }

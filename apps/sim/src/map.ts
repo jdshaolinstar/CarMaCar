@@ -80,9 +80,11 @@ export class LiveMap {
     const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
 
     ctx.lineCap = 'butt';
-    ctx.strokeStyle = '#4b5359';
     ctx.lineWidth = 15;
     for (const s of city.segments) {
+      // Streets take on color as traffic builds, like a real traffic map.
+      const level = twin?.traffic?.[s.id] ?? 1;
+      ctx.strokeStyle = level >= 3 ? '#B23A2E' : level >= 2 ? '#B98A1F' : '#4b5359';
       ctx.beginPath();
       ctx.moveTo(...this.px(nodeById.get(s.a)!));
       ctx.lineTo(...this.px(nodeById.get(s.b)!));

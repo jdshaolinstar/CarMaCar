@@ -2,6 +2,8 @@
 // Deliberately has no field for occupancy going to the platform: FrameUpload is pixels and pose only.
 import type { CameraPose } from './camera';
 import type { Vec2 } from './city';
+import type { DirectedEdge } from './route';
+import type { SignalAxis, VehicleReport } from './tes';
 
 export interface FrameUpload {
   scoutId: string;
@@ -73,12 +75,18 @@ export interface TwinSnapshot {
   trips: TripPlan[];
   karma: Record<string, number>;
   usage: { frames: number; frameLimit: number; budgetExhausted: boolean };
+  /** Street id to how many times longer it takes than in free-flowing traffic. */
+  traffic: Record<string, number>;
+  /** Vehicles cameras counted on streets, which GPS alone would miss. */
+  cameraTrafficCounts: number;
 }
 
 export interface FindParkingRequest {
   destinationId: string;
   carId: string;
   from: Vec2;
+  /** The street the car is on. Lets the Traffic Efficiency System weigh the drive to each stall. */
+  edge?: DirectedEdge;
   exclude?: string[];
 }
 
@@ -91,4 +99,32 @@ export interface TripRequest {
   carId: string;
   text: string;
   position: Vec2;
+}
+
+export interface TelemetryUpload {
+  vehicles: VehicleReport[];
+}
+
+export interface TelemetryReply {
+  /** What smart lights should favor, when they are on. */
+  signals: Record<string, SignalAxis>;
+}
+
+export interface RouteRequest {
+  carId: string;
+  from: DirectedEdge;
+  goal: DirectedEdge;
+}
+
+export interface RouteReply {
+  chain: DirectedEdge[] | null;
+}
+
+export interface TesSettings {
+  enabled: boolean;
+  smartLights: boolean;
+}
+
+export interface OperatorRequest {
+  text: string;
 }

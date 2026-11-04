@@ -8,12 +8,19 @@ import {
   type FindParkingRequest,
   type FindParkingResponse,
   type FrameUpload,
+  type OperatorRequest,
+  type RouteReply,
+  type RouteRequest,
+  type TelemetryReply,
+  type TelemetryUpload,
+  type TesSettings,
   type TripPlan,
   type TripRequest,
 } from '@carmacar/shared';
 import Fastify from 'fastify';
 import OpenAI from 'openai';
 import { runTripAgent } from './agent';
+import { runOperator } from './operator';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
 import { analyzeFrame, isUsableFrame } from './vision/stalls';
@@ -34,6 +41,14 @@ if (!process.env.MODEL_API_KEY) throw new Error('MODEL_API_KEY is not set.');
 const client = new OpenAI({ baseURL: 'https://api.meta.ai/v1', apiKey: process.env.MODEL_API_KEY });
 const vision: VisionProvider = new SamProvider(client);
 const city = generateCity();
+const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
+const roadSegments = city.segments.map((s) => ({
+  id: s.id,
+  start: nodeById.get(s.a)!,
+  dir: s.dir,
+  length: s.length,
+  halfWidth: city.roadHalfWidth - 2.2, // Driving lanes only, not the parking lane.
+}));
 
 const sessions = new Map<string, Twin>();
 const inflight = new Map<string, number>();
@@ -96,7 +111,11 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
   try {
     // The frame lives only in this buffer and is gone when the request ends. It is never stored.
     const masks = await vision.findVehicles(pixels);
-    const { observations, assignments } = analyzeFrame(masks, pose, city.stalls);
+    const { observations, assignments, roadVehicles } = analyzeFrame(masks, pose, city.stalls, roadSegments);
+    for (const [segmentId, count] of roadVehicles) {
+      twin.tes.reportCameraCount(segmentId, count, Date.now() / 1000);
+      twin.cameraTrafficCounts += count;
+    }
     const changes = twin.observe(observations, Date.now());
     twin.addFrame({
       frameId: randomUUID(),
@@ -172,7 +191,15 @@ app.post<{ Params: { id: string }; Body: FindParkingRequest }>('/v1/sessions/:id
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   const destination = city.destinations.find((d) => d.id === req.body.destinationId);
   if (!destination) return reply.code(400).send({ error: 'Unknown destination' });
-  const found = twin.findParking(destination, req.body.exclude ?? []);
+  const exclude = req.body.exclude ?? [];
+  // With the Traffic Efficiency System on, the choice weighs traffic on the way as well as the walk.
+  const chosen =
+    twin.tesEnabled && req.body.edge
+      ? twin.tes.chooseStall(req.body.edge, destination, (s) => twin.available(s, exclude), Date.now() / 1000)
+      : null;
+  const found = chosen
+    ? { stall: chosen, walkMeters: Math.round(distance(chosen.center, destination)) }
+    : twin.findParking(destination, exclude);
   const response: FindParkingResponse = { stallId: null, walkMeters: null };
   if (found && twin.reserve(found.stall.id, req.body.carId)) {
     response.stallId = found.stall.id;
@@ -216,6 +243,45 @@ app.post<{ Params: { id: string }; Body: TripRequest }>('/v1/sessions/:id/trips'
     onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN),
   });
   return { tripId: trip.tripId };
+});
+
+app.post<{ Params: { id: string }; Body: TelemetryUpload }>('/v1/sessions/:id/telemetry', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  const now = Date.now() / 1000;
+  for (const vehicle of req.body.vehicles) twin.tes.reportVehicle(vehicle, now);
+  const signals: TelemetryReply['signals'] = {};
+  if (twin.tesEnabled && twin.smartLights) {
+    const nodes = twin.graph.city.nodes.map((n) => n.id).filter((id) => twin.graph.next(id).length >= 3);
+    for (const [node, axis] of twin.tes.signalPlan(nodes, now)) signals[node] = axis;
+  }
+  return { signals } satisfies TelemetryReply;
+});
+
+app.post<{ Params: { id: string }; Body: RouteRequest }>('/v1/sessions/:id/route', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  if (!twin.tesEnabled) return { chain: null } satisfies RouteReply;
+  const { carId, from, goal } = req.body;
+  return { chain: twin.tes.planRoute(carId, from, goal, Date.now() / 1000) } satisfies RouteReply;
+});
+
+app.post<{ Params: { id: string }; Body: TesSettings }>('/v1/sessions/:id/tes', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  twin.tesEnabled = req.body.enabled;
+  twin.smartLights = req.body.smartLights;
+  return { ok: true };
+});
+
+app.post<{ Params: { id: string }; Body: OperatorRequest }>('/v1/sessions/:id/operator', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  const text = req.body.text?.trim();
+  if (!text || text.length > 400) return reply.code(400).send({ error: 'Request must be 1 to 400 characters' });
+  void runOperator(text, { client, model: AGENT_MODEL, city, twin, onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN) });
+  return { ok: true };
 });
 
 app.addHook('onClose', async () => sessions.clear());

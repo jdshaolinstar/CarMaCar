@@ -25,6 +25,8 @@ export interface FrameAnalysis {
   observations: StallObservation[];
   /** objectId to the stall it was assigned to. */
   assignments: Map<string, string>;
+  /** Vehicles in the road, not parked, by street. Counts everyone, on the network or not. */
+  roadVehicles: Map<string, number>;
 }
 
 interface Located {
@@ -106,12 +108,26 @@ function contactSpan(car: Located, stall: Stall): number {
   return along.length > 1 ? (Math.max(...along) - Math.min(...along)) / stall.length : 0;
 }
 
+export interface RoadSegment {
+  id: string;
+  start: Vec2;
+  dir: Vec2;
+  length: number;
+  halfWidth: number;
+}
+
+function isOnRoad(point: Vec2, seg: RoadSegment) {
+  const rel = sub(point, seg.start);
+  const along = dot(rel, seg.dir);
+  return along >= 0 && along <= seg.length && Math.abs(rel.x * seg.dir.z - rel.z * seg.dir.x) <= seg.halfWidth;
+}
+
 /** A real street frame is busy. A near-uniform frame is a camera fault, not an empty street. */
 export function isUsableFrame(jpeg: Buffer, width: number, height: number): boolean {
   return jpeg.length / (width * height) >= MIN_JPEG_BYTES_PER_PIXEL;
 }
 
-export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Stall[]): FrameAnalysis {
+export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Stall[], segments: RoadSegment[] = []): FrameAnalysis {
   const cam = pinhole(pose);
   const eye = { x: pose.position[0], z: pose.position[2] };
   // Walls and floors block the view: a camera only reads stalls in the same space as itself.
@@ -167,5 +183,14 @@ export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Sta
     }
     if (state !== 'unknown') observations.push({ stallId: stall.id, state, weight: 1 / Math.max(dist, 8) });
   }
-  return { observations, assignments };
+  const roadVehicles = new Map<string, number>();
+  if (!pose.garageId) {
+    for (const car of cars) {
+      if (assignments.has(car.mask.objectId) || car.ground.length === 0) continue;
+      const nearest = car.ground[Math.floor(car.ground.length / 2)];
+      const seg = segments.find((s) => isOnRoad(nearest, s));
+      if (seg) roadVehicles.set(seg.id, (roadVehicles.get(seg.id) ?? 0) + 1);
+    }
+  }
+  return { observations, assignments, roadVehicles };
 }

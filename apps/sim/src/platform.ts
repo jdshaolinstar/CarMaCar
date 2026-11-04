@@ -1,5 +1,16 @@
 // HTTP client for the platform. This is the sim's only way of talking to it.
-import type { FindParkingResponse, FrameUpload, TripRequest, TwinSnapshot, Vec2 } from '@carmacar/shared';
+import type {
+  DirectedEdge,
+  FindParkingResponse,
+  FrameUpload,
+  RouteReply,
+  TelemetryReply,
+  TesSettings,
+  TripRequest,
+  TwinSnapshot,
+  Vec2,
+  VehicleReport,
+} from '@carmacar/shared';
 import type { ParkingService } from './world';
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://127.0.0.1:8787';
@@ -11,6 +22,9 @@ const json = (body: unknown) => ({
 });
 
 export class PlatformClient implements ParkingService {
+  /** Lets parking requests say which street a car is on. */
+  edgeOf: (carId: string) => DirectedEdge | undefined = () => undefined;
+
   private constructor(readonly sessionId: string) {}
 
   static async connect(): Promise<PlatformClient> {
@@ -36,7 +50,7 @@ export class PlatformClient implements ParkingService {
   }
 
   async find(carId: string, destinationId: string, from: Vec2, exclude: string[]): Promise<string | null> {
-    const res = await fetch(this.url('/parking/find'), json({ carId, destinationId, from, exclude }));
+    const res = await fetch(this.url('/parking/find'), json({ carId, destinationId, from, exclude, edge: this.edgeOf(carId) }));
     if (!res.ok) return null;
     const body = (await res.json()) as FindParkingResponse;
     return body.stallId;
@@ -44,6 +58,26 @@ export class PlatformClient implements ParkingService {
 
   release(carId: string) {
     void fetch(this.url('/parking/release'), json({ carId }));
+  }
+
+  async route(carId: string, from: DirectedEdge, goal: DirectedEdge): Promise<DirectedEdge[] | null> {
+    const res = await fetch(this.url('/route'), json({ carId, from, goal }));
+    if (!res.ok) return null;
+    return ((await res.json()) as RouteReply).chain;
+  }
+
+  async telemetry(vehicles: VehicleReport[]): Promise<TelemetryReply | null> {
+    const res = await fetch(this.url('/telemetry'), json({ vehicles }));
+    return res.ok ? res.json() : null;
+  }
+
+  setTes(settings: TesSettings) {
+    void fetch(this.url('/tes'), json(settings));
+  }
+
+  async askOperator(text: string): Promise<boolean> {
+    const res = await fetch(this.url('/operator'), json({ text }));
+    return res.ok;
   }
 
   arrived(carId: string) {

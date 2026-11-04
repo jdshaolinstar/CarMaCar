@@ -36,6 +36,8 @@
         <div><dt>Camera readings correct</dt><dd id="stat-readings">No data</dd></div>
         <div><dt>Photos analyzed</dt><dd id="stat-frames">0</dd></div>
         <div><dt>Karma earned</dt><dd id="stat-karma">0</dd></div>
+        <div><dt>Cars sharing GPS</dt><dd id="stat-gps">0</dd></div>
+        <div><dt>Cars seen by cameras</dt><dd id="stat-camera-cars">0</dd></div>
       </dl>
       <p class="note" id="map-note" hidden>Camera vision is off. This map shows the last thing cameras saw.</p>
       <div class="tools">
@@ -88,6 +90,13 @@
 
     <section class="panel systems-panel" id="systems" aria-label="Systems" hidden>
       <div id="systems-list"></div>
+      <form id="operator">
+        <label for="operator-text">Give the city a goal</label>
+        <div class="trip-row">
+          <input id="operator-text" maxlength="400" autocomplete="off" value="There's a parade on Market St tonight. Keep cars away from it." />
+          <button type="submit">Send</button>
+        </div>
+      </form>
     </section>
 
     <div class="guide" id="nav" role="status" hidden>
