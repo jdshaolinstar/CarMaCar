@@ -244,8 +244,18 @@ export class World {
     });
   }
 
+  /** Abandons a final approach. The car keeps rolling to the end of its path, then carries on down the street. */
+  private leaveFinalApproach(car: Car) {
+    const stall = car.endsAtStall && car.targetStallId ? this.stalls.get(car.targetStallId) : null;
+    if (!stall) return;
+    car.endsAtStall = false;
+    this.pendingEdge.delete(car.id);
+    car.startAlong = this.graph.alongApproach(stall);
+  }
+
   /** Point a car at a stall. It re-plans at the next corner. */
   targetStall(car: Car, stallId: string) {
+    this.leaveFinalApproach(car);
     car.targetStallId = stallId;
     car.mode = 'toStall';
     car.queue = [];
@@ -389,10 +399,11 @@ export class World {
   /** Reacts to the platform's map: network cars drop stalls cameras say are taken and retry when unassigned. */
   syncWithTwin(twin: TwinSnapshot) {
     for (const car of this.cars.values()) {
-      if (car.role !== 'network' || car.phase !== 'drive' || car.endsAtStall) continue;
+      if (car.role !== 'network' || car.phase !== 'drive') continue;
       if (car.targetStallId) {
         const stall = twin.stalls[car.targetStallId];
         if (stall && stall.reservedBy !== car.id) {
+          this.leaveFinalApproach(car);
           car.excludeStalls.push(car.targetStallId);
           car.targetStallId = null;
           car.mode = 'cruise';

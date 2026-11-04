@@ -46,7 +46,7 @@ let frameLimitHit = false;
 
 /** Which side of the street has stalls near this car, if any. */
 function stallSideFor(car: Car): { side: Vec2; stallIds: string[] } | null {
-  if (car.phase !== 'drive' || car.endsAtStall) return null;
+  if (car.phase !== 'drive') return null;
   const graph = world.graph;
   const seg = graph.segmentBetween(car.edge.from, car.edge.to);
   const dir = graph.edgeDir(car.edge);
@@ -63,15 +63,19 @@ function chooseCamera(): { car: Car; pose: CameraPose } | null {
   let bestAge = -1;
   const now = Date.now();
   for (const car of world.cars.values()) {
-    if (!['scout', 'network', 'hero'].includes(car.role) || car.metersSinceCapture < 12) continue;
+    if (!['scout', 'network', 'hero'].includes(car.role) || car.metersSinceCapture < 8) continue;
     const view = stallSideFor(car);
     if (!view) continue;
-    const age = Math.max(
-      ...view.stallIds.map((id) => {
-        const seen = twin?.stalls[id]?.updatedAt;
-        return seen ? now - seen : 1e9;
-      }),
-    );
+    // A driver looking at their own reserved stall comes first: that photo can save them the trip.
+    const watchingOwnStall = car.targetStallId !== null && view.stallIds.includes(car.targetStallId);
+    const age = watchingOwnStall
+      ? Infinity
+      : Math.max(
+          ...view.stallIds.map((id) => {
+            const seen = twin?.stalls[id]?.updatedAt;
+            return seen ? now - seen : 1e9;
+          }),
+        );
     if (age > bestAge) {
       bestAge = age;
       best = { car, side: view.side };

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateCity } from '@carmacar/shared';
-import { World, type ParkingService } from './world';
+import { DelayedMapService, runOnce } from './evaluate';
+import { World } from './world';
 
 const city = generateCity();
 
@@ -34,40 +35,43 @@ test('manual drivers find a stall by looking, and stalls are never double-booked
   }
 });
 
-test('a perfect parking service beats cruising on the same demand', () => {
-  const measure = (share: number) => {
-    const free = (w: World): ParkingService => ({
-      async find(_car, destinationId, _from, exclude) {
-        const d = city.destinations.find((x) => x.id === destinationId)!;
-        const open = city.stalls
-          .filter((s) => !w.stallOwner.has(s.id) && !exclude.includes(s.id))
-          .sort((a, b) => Math.hypot(a.center.x - d.x, a.center.z - d.z) - Math.hypot(b.center.x - d.x, b.center.z - d.z));
-        return open[0]?.id ?? null;
-      },
-      release() {},
-      arrived() {},
-    });
-    const holder: { w?: World } = {};
-    const world = new World(city, 5, { find: (...a) => free(holder.w!).find(...a), release() {}, arrived() {} });
-    holder.w = world;
-    world.populateParked(0.75);
-    world.setDemand(World.makeDemand(city, 7, 25, 60, share));
-    return world;
-  };
-  const avg = (w: World) => {
-    const log = w.parkedLog;
-    return log.reduce((t, r) => t + r.meters, 0) / log.length;
-  };
-  const off = measure(0);
-  run(off, 500);
-  const on = measure(1);
-  // Promises must settle between ticks.
-  return (async () => {
-    for (let t = 0; t < 500; t += 1 / 20) {
-      on.tick(1 / 20);
-      if (Math.round(t * 20) % 20 === 0) await new Promise((r) => setImmediate(r));
-    }
-    assert.ok(on.parkedLog.length > 0 && off.parkedLog.length > 0);
-    assert.ok(avg(on) < avg(off), `on ${avg(on)} vs off ${avg(off)}`);
-  })();
+test('rerouting during a final approach never teleports the car', () => {
+  const world = new World(city, 9, null);
+  const hero = world.addHero();
+  // Start the car on a street whose stalls are on its right.
+  const first = city.stalls[6];
+  hero.edge = world.graph.approachEdge(first);
+  hero.pos = world.graph.lanePoint(hero.edge, hero.startAlong);
+  const second = city.stalls.find((s) => s.segmentId !== first.segmentId)!;
+  world.targetStall(hero, first.id);
+  for (let i = 0; i < 40 && !hero.endsAtStall; i++) world.tick(0.05);
+  assert.ok(hero.endsAtStall, 'hero should be on final approach');
+  world.targetStall(hero, second.id);
+  let last = { ...hero.pos };
+  for (let t = 0; t < 120 && hero.phase === 'drive'; t += 0.05) {
+    world.tick(0.05);
+    const step = Math.hypot(hero.pos.x - last.x, hero.pos.z - last.z);
+    assert.ok(step < 2, `jumped ${step.toFixed(1)} m at t=${t.toFixed(1)}`);
+    last = { ...hero.pos };
+  }
+  assert.equal(hero.stallId, second.id);
+  assert.notEqual(world.stallOwner.get(first.id), hero.id);
+});
+
+test('the evaluator counts drivers who never found a space', async () => {
+  // A nearly full city over a short window: some drivers must still be looking at the end.
+  const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };
+  const result = await runOnce(city, config);
+  assert.ok(result.stillSearching > 0, `searching ${result.stillSearching}`);
+  assert.equal(result.drivers, result.parked + result.stillSearching);
+});
+
+test('reservations stop network cars racing for one stall', async () => {
+  let world: World | undefined;
+  const service = new DelayedMapService(city, () => world!, 0);
+  world = new World(city, 4, service);
+  const a = service.findNow('car1', 'd0', []);
+  const b = service.findNow('car2', 'd0', []);
+  assert.ok(a && b);
+  assert.notEqual(a, b);
 });

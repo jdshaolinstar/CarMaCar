@@ -1,0 +1,102 @@
+[
+  {
+    "parkedShare": 0.75,
+    "networkShare": 0,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 40.22281249999974,
+    "meters": 402.9558445013897,
+    "walk": 48.74062216786613,
+    "km": 16.118233780055586
+  },
+  {
+    "parkedShare": 0.75,
+    "networkShare": 0.25,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 42.97718749999932,
+    "meters": 433.22944923850275,
+    "walk": 43.0321294550795,
+    "km": 17.329177969540112
+  },
+  {
+    "parkedShare": 0.75,
+    "networkShare": 0.5,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 42.17343749999891,
+    "meters": 424.03787797019226,
+    "walk": 37.89685975493909,
+    "km": 16.961515118807693
+  },
+  {
+    "parkedShare": 0.75,
+    "networkShare": 0.75,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 44.512812499998745,
+    "meters": 449.88085408816414,
+    "walk": 31.49986029946983,
+    "km": 17.99523416352657
+  },
+  {
+    "parkedShare": 0.75,
+    "networkShare": 1,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 47.17812499999879,
+    "meters": 478.4619804866856,
+    "walk": 27.087513798004814,
+    "km": 19.138479219467428
+  },
+  {
+    "parkedShare": 0.9,
+    "networkShare": 0,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 66.65406250000105,
+    "meters": 691.5756306524835,
+    "walk": 48.172122498733096,
+    "km": 27.66302522609934
+  },
+  {
+    "parkedShare": 0.9,
+    "networkShare": 0.25,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 57.67343749999915,
+    "meters": 594.428460369063,
+    "walk": 44.776307092346094,
+    "km": 23.777138414762522
+  },
+  {
+    "parkedShare": 0.9,
+    "networkShare": 0.5,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 55.826562499999056,
+    "meters": 573.7606635254969,
+    "walk": 45.948622175015146,
+    "km": 22.950426541019876
+  },
+  {
+    "parkedShare": 0.9,
+    "networkShare": 0.75,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 51.99156249999867,
+    "meters": 531.3822449644142,
+    "walk": 44.921403647472296,
+    "km": 21.255289798576566
+  },
+  {
+    "parkedShare": 0.9,
+    "networkShare": 1,
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 49.92749999999864,
+    "meters": 508.2463173199508,
+    "walk": 46.47715813154838,
+    "km": 20.32985269279803
+  }
+]
