@@ -1,4 +1,5 @@
 // The results panel: the offline study, shown in the app. Always labelled as simulated.
+import highwayRows from '../scripts/highway-results.json';
 import rows from '../scripts/tes-results-all.json';
 
 interface Row {
@@ -13,6 +14,22 @@ interface Row {
 }
 
 const data = rows as Row[];
+
+interface HighwayRow {
+  scenario: string;
+  limit: number;
+  mode: string;
+  seconds: number;
+  missed: number;
+  slow: number;
+  systemHours: number;
+}
+
+const HIGHWAY_TABS: { label: string; scenario: string }[] = [
+  { label: 'Highway rush hour', scenario: 'Rush hour' },
+  { label: 'Highway stadium', scenario: 'Stadium event' },
+];
+const HIGHWAY_LIMIT = 65;
 
 const SHORT_MODE: Record<string, string> = {
   'TES off': 'TES off',
@@ -52,9 +69,32 @@ function barChart(title: string, unit: string, items: { label: string; value: nu
 
 export function renderResults(root: HTMLElement) {
   const scenarios = [...new Set(data.map((d) => d.scenario))];
+  const tabs = [...scenarios, ...HIGHWAY_TABS.map((t) => t.label)];
   const body = document.createElement('div');
 
-  function show(scenario: string) {
+  function showHighway(scenario: string) {
+    const rows = (highwayRows as HighwayRow[]).filter((d) => d.scenario === scenario && d.limit === HIGHWAY_LIMIT);
+    const note = (d: HighwayRow) => `${Math.round(d.slow * 100)}% of mainline time below 30 mph, ${Math.round(d.systemHours)} vehicle-hours including cross streets`;
+    const caption = document.createElement('p');
+    caption.className = 'caption';
+    caption.textContent = `Simulated at ${HIGHWAY_LIMIT} mph against the best fixed signal timing. TES cars keep the same following distance as people.`;
+    body.replaceChildren(
+      barChart('Average trip time', 's', rows.map((d) => ({ label: d.mode, value: d.seconds, baseline: d.mode === 'TES off', note: note(d) }))),
+      barChart('Missed exits', '', rows.map((d) => ({ label: d.mode, value: d.missed, baseline: d.mode === 'TES off', note: note(d) }))),
+      caption,
+    );
+  }
+
+  function show(tab: string) {
+    for (const [i, button] of [...buttons.children].entries()) {
+      button.setAttribute('aria-pressed', String(tabs[i] === tab));
+    }
+    const highway = HIGHWAY_TABS.find((t) => t.label === tab);
+    if (highway) showHighway(highway.scenario);
+    else showCity(tab);
+  }
+
+  function showCity(scenario: string) {
     const scenarioRows = data.filter((d) => d.scenario === scenario);
     const off = scenarioRows.find((d) => d.mode === 'TES off');
     const label = (d: Row) => SHORT_MODE[d.mode] ?? d.mode;
@@ -72,20 +112,17 @@ export function renderResults(root: HTMLElement) {
         scenarioRows.map((d) => ({ label: label(d), value: d.parked, baseline: d === off, note: note(d) })),
       ),
     );
-    for (const [i, button] of [...buttons.children].entries()) {
-      button.setAttribute('aria-pressed', String(scenarios[i] === scenario));
-    }
   }
 
   const buttons = document.createElement('div');
   buttons.className = 'views';
-  for (const scenario of scenarios) {
+  for (const tab of tabs) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = scenario;
-    button.addEventListener('click', () => show(scenario));
+    button.textContent = tab;
+    button.addEventListener('click', () => show(tab));
     buttons.append(button);
   }
   root.replaceChildren(buttons, body);
-  show(scenarios[0]);
+  show(tabs[0]);
 }

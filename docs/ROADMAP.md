@@ -2,6 +2,15 @@
 
 Planned work. None of this is built unless a section says so.
 
+## Highway
+
+The ring highway works as its own model. Next steps:
+
+- Connect it to the town, so cars leaving a ramp become city traffic, and city trips can use the highway.
+- Add exit coordination to the Spark Strategist and test whether it helps. It showed no measurable gain on city streets.
+- Try a smart ramp light policy that accounts for exit choice. The current one did not reduce total delay.
+- Test the idea on data from a real freeway corridor.
+
 ## Graphics levels
 
 A slider, or one slider per layer, that raises the look of the city step by step. It starts at the blocky town and ends at
