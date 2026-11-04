@@ -14,4 +14,6 @@ export interface VehicleMask {
 export interface VisionProvider {
   readonly model: string;
   findVehicles(jpeg: Buffer): Promise<VehicleMask[]>;
+  /** Finds any short noun phrase, such as trash on a sidewalk. */
+  findConcept(jpeg: Buffer, concept: string): Promise<VehicleMask[]>;
 }

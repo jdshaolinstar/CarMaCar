@@ -20,6 +20,15 @@ const MIN_SCORE = 0.02;
 const MAX_FRAMES = 12;
 const MAX_EVENTS = 60;
 
+interface TrashPin {
+  x: number;
+  z: number;
+  misses: number;
+}
+
+const TRASH_MATCH_METRES = 3;
+const TRASH_MISSES_TO_CLEAR = 2;
+
 interface Evidence {
   at: number;
   signed: number;
@@ -39,6 +48,8 @@ export class Twin {
   smartLights = false;
   cameraTrafficCounts = 0;
   frameCount = 0;
+  private readonly trash = new Map<string, TrashPin>();
+  private nextTrashId = 1;
   lastSeen = Date.now();
 
   constructor(private readonly city: CityMap) {
@@ -130,6 +141,30 @@ export class Twin {
     return this.arrivedCars.has(carId);
   }
 
+  /** Updates trash pins from one scanned frame. A pin clears only after cameras see the spot empty twice. */
+  observeTrash(sightings: Vec2[], inView: (point: Vec2) => boolean) {
+    const matched = new Set<string>();
+    for (const seen of sightings) {
+      let hit: string | null = null;
+      for (const [id, pin] of this.trash) {
+        if (distance(pin, seen) < TRASH_MATCH_METRES) hit = id;
+      }
+      if (hit) {
+        matched.add(hit);
+        this.trash.get(hit)!.misses = 0;
+      } else {
+        const id = `t${this.nextTrashId++}`;
+        this.trash.set(id, { x: seen.x, z: seen.z, misses: 0 });
+        matched.add(id);
+      }
+    }
+    for (const [id, pin] of this.trash) {
+      if (matched.has(id) || !inView(pin)) continue;
+      pin.misses++;
+      if (pin.misses >= TRASH_MISSES_TO_CLEAR) this.trash.delete(id);
+    }
+  }
+
   /** Is this stall free and unclaimed, as far as the map knows? */
   available(stall: Stall, exclude: string[]) {
     const t = this.state.get(stall.id)!;
@@ -158,6 +193,7 @@ export class Twin {
       traffic: this.trafficLevels(),
       cameraTrafficCounts: this.cameraTrafficCounts,
       avoidedStreets: [...this.tes.streetPenalties.keys()],
+      trashPins: [...this.trash].map(([id, pin]) => ({ id, x: pin.x, z: pin.z })),
     };
   }
 }

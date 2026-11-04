@@ -23,7 +23,7 @@ import { runTripAgent } from './agent';
 import { runOperator } from './operator';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
-import { analyzeFrame, isUsableFrame } from './vision/stalls';
+import { analyzeFrame, isUsableFrame, locateTrash, trashSpotInView } from './vision/stalls';
 import type { VisionProvider } from './vision/provider';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -34,6 +34,8 @@ const MAX_INFLIGHT_PER_SESSION = 6;
 const MAX_SESSIONS = 40;
 const SESSION_IDLE_MS = 20 * 60_000;
 const SAM_USD_PER_FRAME = 0.0025;
+// Tested on rendered frames: "garbage bag" found real trash with no false alarms. "litter" found nothing.
+const TRASH_CONCEPT = 'garbage bag';
 const AGENT_USD_PER_TOKEN = 0.2 / 1_000_000;
 
 if (!process.env.MODEL_API_KEY) throw new Error('MODEL_API_KEY is not set.');
@@ -117,6 +119,12 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
       twin.cameraTrafficCounts += count;
     }
     const changes = twin.observe(observations, Date.now());
+    // A second look for trash, only on frames the client marks, because it costs a second call.
+    const trashMasks = pose.scanTrash ? await vision.findConcept(pixels, TRASH_CONCEPT) : [];
+    if (pose.scanTrash) {
+      addSpend(SAM_USD_PER_FRAME);
+      twin.observeTrash(locateTrash(trashMasks, pose, city.sidewalkHeight), (p) => trashSpotInView(p, pose, city.sidewalkHeight));
+    }
     twin.addFrame({
       frameId: randomUUID(),
       scoutId,
@@ -132,6 +140,7 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
         stallId: assignments.get(m.objectId) ?? null,
       })),
       stalls: observations.map((o) => ({ id: o.stallId, state: o.state })),
+      trash: trashMasks.map((m) => m.box),
     });
     twin.karma.set(scoutId, (twin.karma.get(scoutId) ?? 0) + observations.length);
 

@@ -60,6 +60,19 @@ test('the ground line runs between the wheels, not along the raised body', () =>
   assert.equal(hull.find((p) => p.col === 10)?.row, 100);
 });
 
+test('a trash pin needs a sighting, and only clears after cameras see the spot empty twice', () => {
+  const twin = new Twin(generateCity());
+  twin.observeTrash([{ x: 5, z: 5 }], () => true);
+  twin.observeTrash([{ x: 5.5, z: 5 }], () => true);
+  assert.equal(twin.snapshot(0, false).trashPins.length, 1, 'repeat sightings are one pin');
+  twin.observeTrash([], () => false);
+  assert.equal(twin.snapshot(0, false).trashPins.length, 1, 'out of view says nothing');
+  twin.observeTrash([], () => true);
+  assert.equal(twin.snapshot(0, false).trashPins.length, 1);
+  twin.observeTrash([], () => true);
+  assert.equal(twin.snapshot(0, false).trashPins.length, 0);
+});
+
 test('an empty view reports fully visible stalls as free', () => {
   const { observations } = analyzeFrame([], pose, stalls);
   assert.ok(observations.some((o) => o.state === 'free'));

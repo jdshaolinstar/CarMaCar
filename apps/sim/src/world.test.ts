@@ -311,6 +311,18 @@ test('a mixed city with garages stays free of same-level crashes', async () => {
   assert.ok(world.parkedLog.length > 20, `parked ${world.parkedLog.length}`);
 });
 
+test('good samaritans only go to litter the network has pinned, and earn karma', () => {
+  const world = new World(city, 28, null);
+  world.addWalkers(30, 0, 12);
+  world.scatterLitter(10);
+  run(world, 60);
+  assert.equal(world.litter.size, 10, 'nobody should know about unpinned litter');
+  world.litterPins = [...world.litter.values()].map((l) => ({ id: l.id, x: l.pos.x, z: l.pos.z }));
+  run(world, 300);
+  assert.ok(world.litter.size < 10, `still ${world.litter.size} left`);
+  assert.equal(world.cleanupKarma, (10 - world.litter.size) * 10);
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };

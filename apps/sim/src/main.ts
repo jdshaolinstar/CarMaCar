@@ -21,6 +21,7 @@ const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
+let trashScanOn = true;
 /** Set by the stolen stall playbook: the next stall the trip agent reserves gets taken. */
 let stealNextPlannedStall = false;
 
@@ -57,6 +58,8 @@ world.autopilotShare = autopilotShare;
 world.gpsShare = gpsShare;
 world.populateParked(parkedShare);
 world.addScouts(scouts);
+world.addWalkers(Number(params.get('walkers') ?? 60), 8, 8);
+world.scatterLitter(Number(params.get('litter') ?? 25));
 const hero = world.addHero();
 world.setDemand(World.makeDemand(city, seed + 1, drivers, 300, { guided: networkShare, autopilot: autopilotShare, gps: gpsShare }));
 if (platform) platform.edgeOf = (carId) => world.cars.get(carId)?.edge;
@@ -144,6 +147,7 @@ async function takePhoto() {
   const fromGarage = ++photosTaken % 3 === 0 ? chooseGarageCamera() : null;
   const fromCar = fromGarage ? null : chooseCamera();
   const pose = fromGarage?.pose ?? fromCar?.pose;
+  if (pose && fromCar && trashScanOn && photosTaken % 3 === 1) pose.scanTrash = true;
   const scoutId = fromGarage?.id ?? fromCar?.car.id;
   if (!pose || !scoutId) return;
   inFlight++;
@@ -210,7 +214,7 @@ function showLatestFrame() {
         : '';
       return `<path class="mask" transform="translate(${l} ${t}) scale(${sx} ${sy})" d="${d.maskPath}"/>${tag}`;
     })
-    .join('');
+    .join('') + (report.trash ?? []).map(([l, t, r, b]) => `<rect class="trash" x="${l}" y="${t}" width="${r - l}" height="${b - t}"/>`).join('');
   const vehicles = report.detections.length;
   $('frame-caption').textContent =
     `${report.model} found ${vehicles} ${vehicles === 1 ? 'vehicle' : 'vehicles'} in ${(report.latencyMs / 1000).toFixed(1)} s and read ${report.stalls.length} stalls. Photo deleted.`;
@@ -236,6 +240,9 @@ function updateStats() {
   $('stat-frames').textContent = String(twin.usage.frames);
   $('stat-gps').textContent = String([...world.cars.values()].filter((c) => c.sharesGps && c.phase === 'drive').length);
   $('stat-camera-cars').textContent = String(twin.cameraTrafficCounts);
+  $('stat-trash').textContent = String(twin.trashPins.length);
+  $('stat-clean').textContent = String(world.cleanupKarma);
+  world.litterPins = twin.trashPins;
   const total = readings.right + readings.falseFree.length + readings.falseTaken.length;
   $('stat-readings').textContent = total ? `${((100 * readings.right) / total).toFixed(1)}%` : 'No data';
   $('stat-karma').textContent = String(Object.values(twin.karma).reduce((sum, k) => sum + k, 0));
@@ -396,6 +403,14 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: true },
   },
   {
+    id: 'trash',
+    name: 'Trash detection',
+    description: 'Every third street photo also looks for trash and pins it on the map.',
+    layer: 'production',
+    engine: 'Meta SAM 3.1',
+    control: { type: 'toggle', value: true },
+  },
+  {
     id: 'photoRate',
     name: 'Photos per second',
     description: 'How often the network looks. More photos cost more.',
@@ -468,6 +483,22 @@ const systems: SystemDef[] = [
     control: { type: 'range', value: gpsShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
   },
   {
+    id: 'litterers',
+    name: 'People dropping litter',
+    description: 'A few pedestrians drop trash as they walk.',
+    layer: 'simulation',
+    engine: 'Scripted, no AI',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'samaritans',
+    name: 'Good samaritans',
+    description: 'Walkers in green head for pinned trash and earn karma.',
+    layer: 'simulation',
+    engine: 'Scripted, no AI',
+    control: { type: 'toggle', value: true },
+  },
+  {
     id: 'lights',
     name: 'Traffic lights',
     description: 'Timed lights at every intersection.',
@@ -505,6 +536,9 @@ function applySystem(id: string, value: boolean | number | string) {
     visionOn = value as boolean;
     $('map-note').hidden = visionOn;
   } else if (id === 'garageCameras') garageVisionOn = value as boolean;
+  else if (id === 'trash') trashScanOn = value as boolean;
+  else if (id === 'litterers') world.litterEnabled = value as boolean;
+  else if (id === 'samaritans') world.samaritansEnabled = value as boolean;
   else if (id === 'photoRate') framesPerSecond = value as number;
   else if (id === 'tes') {
     tesOn = value as boolean;
@@ -558,6 +592,17 @@ function openStreets() {
 const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
+  {
+    id: 'cleanup',
+    title: 'Clean up the block',
+    description: 'A burst of litter hits the sidewalks. Cameras pin it, and good samaritans in green go and get it.',
+    watch: 'Yellow pins appear on the map, then clear only once a camera sees the spot is empty.',
+    run() {
+      setSystem('trash', true);
+      setSystem('samaritans', true);
+      world.scatterLitter(30);
+    },
+  },
   {
     id: 'surge-off',
     title: 'Movie theater surge, no TES',

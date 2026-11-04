@@ -40,6 +40,8 @@ export interface FrameReport {
   latencyMs: number;
   model: string;
   detections: FrameDetection[];
+  /** Trash found on this frame, as boxes. */
+  trash?: [number, number, number, number][];
   stalls: { id: string; state: StallState }[];
 }
 
@@ -81,6 +83,8 @@ export interface TwinSnapshot {
   cameraTrafficCounts: number;
   /** Streets an operator goal is steering cars away from. */
   avoidedStreets: string[];
+  /** Trash cameras have seen and no camera has yet seen gone. */
+  trashPins: { id: string; x: number; z: number }[];
 }
 
 export interface FindParkingRequest {

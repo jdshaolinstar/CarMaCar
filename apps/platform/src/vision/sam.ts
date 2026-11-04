@@ -42,7 +42,11 @@ export class SamProvider implements VisionProvider {
 
   constructor(private readonly client: OpenAI) {}
 
-  async findVehicles(jpeg: Buffer): Promise<VehicleMask[]> {
+  findVehicles(jpeg: Buffer): Promise<VehicleMask[]> {
+    return this.findConcept(jpeg, CONCEPT);
+  }
+
+  async findConcept(jpeg: Buffer, concept: string): Promise<VehicleMask[]> {
     const stream = await this.client.responses.create({
       model: this.model,
       stream: true,
@@ -51,7 +55,7 @@ export class SamProvider implements VisionProvider {
           type: 'message',
           role: 'user',
           content: [
-            { type: 'input_text', text: CONCEPT },
+            { type: 'input_text', text: concept },
             { type: 'input_image', image_url: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
           ],
         },

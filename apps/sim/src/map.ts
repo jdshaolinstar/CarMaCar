@@ -171,6 +171,17 @@ export class LiveMap {
       ctx.fillText(label, x + dx, y + dy);
     }
 
+    for (const pin of twin?.trashPins ?? []) {
+      const [x, y] = this.px(pin);
+      ctx.fillStyle = '#F2B90F';
+      ctx.strokeStyle = '#2C3135';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     for (const car of world.cars.values()) {
       if (car.phase === 'parked' || (car.insideGarage && car.id !== selected)) continue;
       const [x, y] = this.px(car.pos);

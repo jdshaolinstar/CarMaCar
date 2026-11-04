@@ -14,6 +14,8 @@ export interface CameraPose {
   level?: number;
   /** Height of the floor in view. Zero for the street. */
   floorY?: number;
+  /** Also look for trash on this frame. Costs a second vision call. */
+  scanTrash?: boolean;
 }
 
 const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

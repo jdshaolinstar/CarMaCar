@@ -82,12 +82,23 @@ export interface Garage extends Vec2 {
   cameras: GarageCamera[];
 }
 
+/** A loop of sidewalk around one block. Pedestrians walk these. */
+export interface SidewalkRing {
+  id: string;
+  /** Corners in walking order. The loop closes back to the first. */
+  corners: Vec2[];
+  length: number;
+}
+
 export interface CityMap {
   nodes: CityNode[];
   segments: Segment[];
   stalls: Stall[];
   destinations: Destination[];
   garages: Garage[];
+  sidewalks: SidewalkRing[];
+  /** Height of the sidewalk surface. */
+  sidewalkHeight: number;
   roadHalfWidth: number;
   sidewalkWidth: number;
   laneOffset: number;
@@ -101,6 +112,7 @@ export const SPACING_Z = 72;
 export const ROAD_HALF_WIDTH = 6;
 export const SIDEWALK_WIDTH = 2.5;
 export const LANE_OFFSET = 1.8;
+const SIDEWALK_HEIGHT = 0.3;
 
 const ROW_STREETS = ['Pine St', 'Market St', 'Mission St'];
 const COLUMN_STREETS = ['1st Ave', '2nd Ave', '3rd Ave', '4th Ave'];
@@ -292,6 +304,24 @@ export function generateCity(): CityMap {
     };
   });
 
+  const sidewalks: SidewalkRing[] = [];
+  const inset = ROAD_HALF_WIDTH + SIDEWALK_WIDTH / 2;
+  for (let c = 0; c < COLS - 1; c++) {
+    for (let r = 0; r < ROWS - 1; r++) {
+      const x0 = originX + c * SPACING_X + inset;
+      const x1 = originX + (c + 1) * SPACING_X - inset;
+      const z0 = originZ + r * SPACING_Z + inset;
+      const z1 = originZ + (r + 1) * SPACING_Z - inset;
+      const middle = { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
+      if (garages.some((g) => distance(g, middle) < 40)) continue;
+      sidewalks.push({
+        id: `walk${c}_${r}`,
+        corners: [{ x: x0, z: z0 }, { x: x1, z: z0 }, { x: x1, z: z1 }, { x: x0, z: z1 }],
+        length: 2 * (x1 - x0 + (z1 - z0)),
+      });
+    }
+  }
+
   const pad = 60;
   return {
     nodes,
@@ -299,6 +329,8 @@ export function generateCity(): CityMap {
     stalls,
     destinations,
     garages,
+    sidewalks,
+    sidewalkHeight: SIDEWALK_HEIGHT,
     roadHalfWidth: ROAD_HALF_WIDTH,
     sidewalkWidth: SIDEWALK_WIDTH,
     laneOffset: LANE_OFFSET,
@@ -309,4 +341,20 @@ export function generateCity(): CityMap {
       maxZ: -originZ + pad,
     },
   };
+}
+
+/** A point partway round a sidewalk loop, optionally stepped sideways off its center line. */
+export function pointOnRing(ring: SidewalkRing, s: number, sideways = 0): Vec2 {
+  let left = ((s % ring.length) + ring.length) % ring.length;
+  for (let i = 0; i < ring.corners.length; i++) {
+    const a = ring.corners[i];
+    const b = ring.corners[(i + 1) % ring.corners.length];
+    const length = distance(a, b);
+    if (left <= length) {
+      const dir = { x: (b.x - a.x) / length, z: (b.z - a.z) / length };
+      return add(add(a, scale(dir, left)), scale(rightOf(dir), sideways));
+    }
+    left -= length;
+  }
+  return ring.corners[0];
 }

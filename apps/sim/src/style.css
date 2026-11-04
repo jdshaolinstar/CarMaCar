@@ -98,10 +98,11 @@ button[aria-pressed='true'], button[type='submit'] { background: var(--sign-blue
 .swatch.free { background: var(--curb-green); }
 .swatch.taken { background: var(--curb-red); }
 .swatch.unseen { background: var(--unseen); }
+.swatch.trash { background: var(--lane-yellow); width: 9px; height: 9px; border-radius: 50%; }
 
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-bottom: 10px; }
-.stats dt { color: var(--muted); font-size: 13px; }
-.stats dd { font-size: 24px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 12px; margin-bottom: 10px; }
+.stats dt { color: var(--muted); font-size: 12.5px; line-height: 1.15; }
+.stats dd { font-size: 21px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
 
 .hint { color: var(--muted); font-size: 13px; margin-top: 7px; }
 
@@ -112,6 +113,7 @@ h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .frame-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 .frame svg .mask { fill: var(--lane-yellow); fill-opacity: 0.45; stroke: var(--lane-yellow); stroke-width: 2; }
 .frame svg .box { fill: none; stroke: var(--lane-yellow); stroke-width: 3; }
+.frame svg .trash { fill: none; stroke: #ff5bd2; stroke-width: 4; }
 .frame svg text { fill: #111; font: 800 26px Overpass, Arial, sans-serif; }
 .frame svg .tag { fill: var(--lane-yellow); }
 

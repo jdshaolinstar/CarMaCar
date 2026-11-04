@@ -1,1 +1,102 @@
-[{"scenario":"Everyday traffic","mode":"TES off","parked":59,"searching":1,"seconds":129,"meters":541,"walk":43,"km":32.5}]
+[
+  {
+    "scenario": "Everyday traffic",
+    "mode": "TES off",
+    "parked": 59,
+    "searching": 1,
+    "seconds": 128.77958333334192,
+    "meters": 541.0869036801819,
+    "walk": 42.62799163313039,
+    "km": 32.465214220810914
+  },
+  {
+    "scenario": "Everyday traffic",
+    "mode": "TES on, 60% guided",
+    "parked": 57.5,
+    "searching": 2.5,
+    "seconds": 108.53708333333923,
+    "meters": 434.34067342209124,
+    "walk": 41.09431143934521,
+    "km": 26.060440405325476
+  },
+  {
+    "scenario": "Everyday traffic",
+    "mode": "TES on, 30% guided, 30% autopilot",
+    "parked": 57,
+    "searching": 3,
+    "seconds": 113.58458333334067,
+    "meters": 423.06877607525547,
+    "walk": 40.91374633928089,
+    "km": 25.384126564515327
+  },
+  {
+    "scenario": "Everyday traffic",
+    "mode": "TES on, 100% autopilot",
+    "parked": 59.25,
+    "searching": 0.75,
+    "seconds": 110.45333333334078,
+    "meters": 354.1428974144587,
+    "walk": 45.4557927244197,
+    "km": 21.248573844867522
+  },
+  {
+    "scenario": "Everyday traffic",
+    "mode": "Same, plus smart lights",
+    "parked": 60,
+    "searching": 0,
+    "seconds": 90.03541666667066,
+    "meters": 351.0980701866006,
+    "walk": 45.02649923428261,
+    "km": 21.065884211196032
+  },
+  {
+    "scenario": "Spiderdude at 8pm",
+    "mode": "TES off",
+    "parked": 17.75,
+    "searching": 84.25,
+    "seconds": 524.3205325387661,
+    "meters": 220.5406793592037,
+    "walk": 54.63559186724123,
+    "km": 22.481960673843
+  },
+  {
+    "scenario": "Spiderdude at 8pm",
+    "mode": "TES on, 60% guided",
+    "parked": 36.25,
+    "searching": 70.75,
+    "seconds": 431.49388913745463,
+    "meters": 259.86405590087577,
+    "walk": 62.41247403521615,
+    "km": 27.817484403979563
+  },
+  {
+    "scenario": "Spiderdude at 8pm",
+    "mode": "TES on, 30% guided, 30% autopilot",
+    "parked": 39.75,
+    "searching": 67.25,
+    "seconds": 414.0690382600149,
+    "meters": 288.34384006205204,
+    "walk": 63.49439782664002,
+    "km": 30.87300172715614
+  },
+  {
+    "scenario": "Spiderdude at 8pm",
+    "mode": "TES on, 100% autopilot",
+    "parked": 65,
+    "searching": 43.25,
+    "seconds": 289.29651386079234,
+    "meters": 316.5220975291246,
+    "walk": 72.13924107018059,
+    "km": 34.279440122118665
+  },
+  {
+    "scenario": "Spiderdude at 8pm",
+    "mode": "Same, plus smart lights",
+    "parked": 66.75,
+    "searching": 39.75,
+    "seconds": 285.1407892437225,
+    "meters": 326.4142458554397,
+    "walk": 70.67136614733943,
+    "km": 34.850743856891505
+  }
+]

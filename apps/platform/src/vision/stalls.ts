@@ -194,3 +194,29 @@ export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Sta
   }
   return { observations, assignments, roadVehicles };
 }
+
+const TRASH_MIN_RANGE = 3;
+const TRASH_MAX_RANGE = 24;
+
+/** Where trash sits on the sidewalk, from masks. Uses the bottom of each box, which touches the ground. */
+export function locateTrash(masks: VehicleMask[], pose: CameraPose, sidewalkHeight: number): Vec2[] {
+  const cam = pinhole({ ...pose, floorY: sidewalkHeight });
+  const eye = { x: pose.position[0], z: pose.position[2] };
+  const found: Vec2[] = [];
+  for (const mask of masks) {
+    const [left, , right, bottom] = mask.box;
+    const point = cam.toGround((left + right) / 2, bottom);
+    if (!point) continue;
+    const range = Math.hypot(point.x - eye.x, point.z - eye.z);
+    if (range >= TRASH_MIN_RANGE && range <= TRASH_MAX_RANGE) found.push(point);
+  }
+  return found;
+}
+
+/** Whether a spot is clearly in view, so that seeing nothing there means something. */
+export function trashSpotInView(point: Vec2, pose: CameraPose, sidewalkHeight: number): boolean {
+  const px = pinhole(pose).project([point.x, sidewalkHeight, point.z]);
+  if (!px || px[0] < 40 || px[0] > pose.width - 40 || px[1] < 40 || px[1] > pose.height - 40) return false;
+  const range = Math.hypot(point.x - pose.position[0], point.z - pose.position[2]);
+  return range >= 5 && range <= 14;
+}

@@ -4,6 +4,7 @@ import {
   add,
   distance,
   dot,
+  pointOnRing,
   rightOf,
   RoadGraph,
   scale,
@@ -12,6 +13,7 @@ import {
   type DirectedEdge,
   type Garage,
   Path,
+  type SidewalkRing,
   type Stall,
   type TripPlan,
   type TwinSnapshot,
@@ -89,6 +91,29 @@ export interface Car {
   tripId: string | null;
 }
 
+export type WalkerRole = 'walker' | 'litterer' | 'samaritan';
+
+export interface Walker {
+  id: string;
+  role: WalkerRole;
+  ring: SidewalkRing;
+  s: number;
+  speed: number;
+  color: string;
+  pos: Vec2;
+  heading: Vec2;
+  /** Litter this person is heading for. */
+  targetLitter: string | null;
+}
+
+export type LitterKind = 'bag' | 'box' | 'can';
+
+export interface Litter {
+  id: string;
+  kind: LitterKind;
+  pos: Vec2;
+}
+
 export interface GarageLeg {
   path: Path;
   level: number;
@@ -150,6 +175,11 @@ const COMFORT_BRAKING = 4;
 const HARD_BRAKING = 8;
 
 const CLAIM_MARGIN = 2;
+const PICKUP_REACH = 0.9;
+const KARMA_PER_PICKUP = 10;
+const LITTER_CHANCE_PER_SECOND = 0.03;
+const SAMARITAN_REACH = 45;
+const PIN_MATCH = 4;
 const GUIDED_COMPLIANCE = 0.85;
 /** People take a moment to move off. Automation does not, which is where it adds road capacity. */
 const HUMAN_START_DELAY = 0.9;
@@ -212,6 +242,16 @@ export class World {
   /** Node id to the cars currently inside that intersection. */
   private readonly junctions = new Map<string, Set<string>>();
   private activeCars: Car[] = [];
+  readonly walkers: Walker[] = [];
+  /** Ground truth: litter physically on the sidewalk. */
+  readonly litter = new Map<string, Litter>();
+  /** Where the platform says litter is. Only cameras can fill this in. */
+  litterPins: { id: string; x: number; z: number }[] = [];
+  /** Karma earned by people picking up litter. */
+  cleanupKarma = 0;
+  litterEnabled = true;
+  /** System switch: good samaritans act on trash pins. */
+  samaritansEnabled = true;
   /** Garage and level to the car currently crossing that hub. */
   private readonly hubTurns = new Map<string, string>();
   time = 0;
@@ -363,6 +403,91 @@ export class World {
 
   setParking(service: ParkingService) {
     this.parking = service;
+  }
+
+  /** Fills the sidewalks with people. */
+  addWalkers(count: number, litterers: number, samaritans: number) {
+    const shirts = ['#d84315', '#3949ab', '#00897b', '#c0ca33', '#8e24aa', '#f4511e', '#546e7a', '#fbc02d'];
+    for (let i = 0; i < count; i++) {
+      const ring = this.pick(this.city.sidewalks);
+      const role: WalkerRole = i < litterers ? 'litterer' : i < litterers + samaritans ? 'samaritan' : 'walker';
+      this.walkers.push({
+        id: `w${i}`,
+        role,
+        ring,
+        s: this.rng() * ring.length,
+        speed: (this.rng() < 0.5 ? 1 : -1) * (1.1 + this.rng() * 0.6),
+        color: role === 'samaritan' ? '#2FE36F' : this.pick(shirts),
+        pos: ring.corners[0],
+        heading: { x: 1, z: 0 },
+        targetLitter: null,
+      });
+    }
+  }
+
+  /** Drops litter somewhere on the sidewalks. Used at the start and by the litterers. */
+  addLitter(pos: Vec2) {
+    const id = `l${this.nextId++}`;
+    this.litter.set(id, { id, kind: this.pick<LitterKind>(['bag', 'bag', 'box', 'can']), pos });
+    return id;
+  }
+
+  scatterLitter(count: number) {
+    for (let i = 0; i < count; i++) {
+      const ring = this.pick(this.city.sidewalks);
+      this.addLitter(pointOnRing(ring, this.rng() * ring.length, (this.rng() - 0.5) * 1.6));
+    }
+  }
+
+  private tickWalkers(dt: number) {
+    for (const w of this.walkers) {
+      if (w.role === 'samaritan' && this.samaritansEnabled) this.chooseLitter(w);
+      const target = w.targetLitter ? this.litter.get(w.targetLitter) : null;
+      if (w.targetLitter && !target) w.targetLitter = null;
+      if (target) {
+        const dist = distance(w.pos, target.pos);
+        if (dist < PICKUP_REACH) {
+          this.litter.delete(target.id);
+          w.targetLitter = null;
+          this.cleanupKarma += KARMA_PER_PICKUP;
+          continue;
+        }
+        // Walk straight to it: litter on this block's sidewalk is always close to the loop.
+        const dir = scale(sub(target.pos, w.pos), 1 / dist);
+        w.pos = add(w.pos, scale(dir, Math.abs(w.speed) * 1.3 * dt));
+        w.heading = dir;
+        continue;
+      }
+      const before = w.pos;
+      w.s += w.speed * dt;
+      w.pos = pointOnRing(w.ring, w.s);
+      const moved = sub(w.pos, before);
+      const length = Math.hypot(moved.x, moved.z);
+      if (length > 1e-3) w.heading = scale(moved, 1 / length);
+      if (w.role === 'litterer' && this.litterEnabled && this.rng() < LITTER_CHANCE_PER_SECOND * dt) {
+        this.addLitter(pointOnRing(w.ring, w.s, (this.rng() - 0.5) * 1.6));
+      }
+    }
+  }
+
+  /** A good samaritan heads for the nearest pin the network reported on their block. */
+  private chooseLitter(w: Walker) {
+    if (w.targetLitter) return;
+    let bestPin: Litter | null = null;
+    let bestDist = SAMARITAN_REACH;
+    for (const pin of this.litterPins) {
+      const d = distance(pin, w.pos);
+      if (d >= bestDist) continue;
+      // A pin is only a report. The person finds the real item when they get there.
+      for (const item of this.litter.values()) {
+        if (distance(item.pos, pin) < PIN_MATCH) {
+          bestPin = item;
+          bestDist = d;
+          break;
+        }
+      }
+    }
+    if (bestPin) w.targetLitter = bestPin.id;
   }
 
   /** Sends a burst of drivers to one place, for scenarios like a movie letting out. */
@@ -1150,6 +1275,7 @@ export class World {
   tick(dt: number) {
     this.time += dt;
     this.signals.tick(this.time);
+    this.tickWalkers(dt);
     // Each driver joins the road only where there is room. One blocked spot must not hold up the rest.
     if (this.driversEnabled) {
       for (let i = 0; i < this.demand.length && this.demand[i].at <= this.time; i++) {

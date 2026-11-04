@@ -21,7 +21,7 @@ import {
 } from '@babylonjs/core';
 import { add, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
 import type { LightState } from './signals';
-import { LIFT_SECONDS, type Car, type World } from './world';
+import { LIFT_SECONDS, type Car, type LitterKind, type World } from './world';
 
 export type CameraView = 'city' | 'chase' | 'dash';
 
@@ -75,6 +75,9 @@ export class CityScene {
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
   private view: CameraView = 'city';
+  private readonly walkerMeshes = new Map<string, InstancedMesh>();
+  private readonly litterMeshes = new Map<string, InstancedMesh>();
+  private litterTemplates!: Record<LitterKind, Mesh>;
   private readonly garageParts: { mesh: Mesh; level: number }[] = [];
   private garageTopLevel = Infinity;
   private routeLine: Mesh | null = null;
@@ -152,6 +155,7 @@ export class CityScene {
     this.buildDestinationSigns();
     this.buildBuildingLabels();
     this.buildSignals();
+    this.buildPeopleAndLitter();
   }
 
   private garageAt(x0: number, x1: number, z0: number, z1: number) {
@@ -227,6 +231,110 @@ export class CityScene {
     for (const [id, marker] of this.stallMarkers) {
       const level = this.world.stalls.get(id)?.level ?? 0;
       marker.setEnabled(level <= topLevel);
+    }
+  }
+
+  private buildPeopleAndLitter() {
+    const skin = Color3.FromHexString('#d7a77f').toColor4();
+    const legs = Color3.FromHexString('#2b3440').toColor4();
+    const person = (hex: string) => {
+      const shirt = Color3.FromHexString(hex).toColor4();
+      const body = MeshBuilder.CreateCylinder('torso', { diameterTop: 0.42, diameterBottom: 0.34, height: 0.72, tessellation: 8, faceColors: Array(3).fill(shirt) }, this.scene);
+      body.position.y = 1.2;
+      const lower = MeshBuilder.CreateCylinder('legs', { diameter: 0.32, height: 0.84, tessellation: 8, faceColors: Array(3).fill(legs) }, this.scene);
+      lower.position.y = 0.42;
+      const head = MeshBuilder.CreateSphere('head', { diameter: 0.3, segments: 6 }, this.scene);
+      head.position.y = 1.72;
+      head.setVerticesData('color', new Array((head.getTotalVertices()) * 4).fill(0).map((_, i) => [skin.r, skin.g, skin.b, 1][i % 4]));
+      const merged = Mesh.MergeMeshes([body, lower, head], true, true)!;
+      const material = new StandardMaterial(`person-${hex}`, this.scene);
+      material.specularColor = Color3.Black();
+      merged.material = material;
+      merged.useVertexColors = true;
+      merged.isVisible = false;
+      merged.isPickable = false;
+      return merged;
+    };
+    const templates = new Map<string, Mesh>();
+    for (const w of this.world.walkers) {
+      if (!templates.has(w.color)) templates.set(w.color, person(w.color));
+      const mesh = templates.get(w.color)!.createInstance(w.id);
+      mesh.isPickable = false;
+      this.walkerMeshes.set(w.id, mesh);
+    }
+    // Lumpy, flat-shaded and tied at the top. A smooth sphere reads as a ball, even to SAM.
+    const lumpyBag = (size: number, x: number, z: number, hex: string) => {
+      const color = Color3.FromHexString(hex).toColor4();
+      const sack = MeshBuilder.CreateSphere('sack', { diameterX: size, diameterY: size * 1.05, diameterZ: size * 0.9, segments: 5, updatable: true }, this.scene);
+      const points = sack.getVerticesData('position')!;
+      for (let i = 0; i < points.length; i += 3) {
+        const [px, py, pz] = [points[i], points[i + 1], points[i + 2]];
+        const bump = 1 + 0.2 * Math.sin(px * 13 + py * 7) * Math.cos(pz * 11 + py * 5);
+        points[i] = px * bump;
+        points[i + 1] = py * bump * (py > 0 ? 1.15 : 0.85);
+        points[i + 2] = pz * bump;
+      }
+      sack.setVerticesData('position', points);
+      const neck = MeshBuilder.CreateCylinder('neck', { diameterTop: size * 0.3, diameterBottom: size * 0.12, height: size * 0.3, tessellation: 6 }, this.scene);
+      neck.position.y = size * 0.68;
+      neck.bakeCurrentTransformIntoVertices();
+      const merged = Mesh.MergeMeshes([sack, neck], true, true)!;
+      merged.convertToFlatShadedMesh();
+      merged.setVerticesData('color', new Array(merged.getTotalVertices() * 4).fill(0).map((_, i) => [color.r, color.g, color.b, 1][i % 4]));
+      merged.position.set(x, size * 0.45, z);
+      merged.bakeCurrentTransformIntoVertices();
+      return merged;
+    };
+    const crushedBox = (w: number, x: number, z: number, angle: number) => {
+      const brown = Color3.FromHexString('#b58a5a').toColor4();
+      const flap = Color3.FromHexString('#8f6a43').toColor4();
+      const body = MeshBuilder.CreateBox('carton', { width: w, height: w * 0.55, depth: w * 0.75, faceColors: [brown, brown, flap, flap, flap, brown] }, this.scene);
+      body.rotation.set(0.25, angle, 0.15);
+      body.position.set(x, w * 0.3, z);
+      body.bakeCurrentTransformIntoVertices();
+      return body;
+    };
+    const bag = Mesh.MergeMeshes(
+      [lumpyBag(0.85, 0, 0, '#1b1d20'), lumpyBag(0.62, 0.62, 0.2, '#25282c'), lumpyBag(0.55, -0.5, 0.35, '#e4e6e3'), crushedBox(0.55, 0.15, -0.6, 0.6)],
+      true,
+      true,
+    )!;
+    const box = Mesh.MergeMeshes([crushedBox(0.8, 0, 0, 0.3), crushedBox(0.6, 0.55, 0.3, 1.1), lumpyBag(0.55, -0.55, 0.3, '#1b1d20')], true, true)!;
+    const can = Mesh.MergeMeshes([lumpyBag(0.7, 0, 0, '#2a2d31'), crushedBox(0.5, 0.5, 0.2, 0.9)], true, true)!;
+    const litterMaterial = new StandardMaterial('litter', this.scene);
+    litterMaterial.specularColor = new Color3(0.35, 0.35, 0.35);
+    for (const t of [bag, box, can]) {
+      t.material = litterMaterial;
+      t.useVertexColors = true;
+    }
+    this.litterTemplates = { bag, box, can };
+    for (const t of [bag, box, can]) {
+      t.isVisible = false;
+      t.isPickable = false;
+    }
+  }
+
+  private syncPeopleAndLitter() {
+    const y = this.city.sidewalkHeight;
+    for (const w of this.world.walkers) {
+      const mesh = this.walkerMeshes.get(w.id);
+      if (!mesh) continue;
+      mesh.position.set(w.pos.x, y, w.pos.z);
+      mesh.rotation.y = Math.atan2(w.heading.x, w.heading.z);
+    }
+    for (const [id, mesh] of this.litterMeshes) {
+      if (!this.world.litter.has(id)) {
+        mesh.dispose();
+        this.litterMeshes.delete(id);
+      }
+    }
+    for (const item of this.world.litter.values()) {
+      if (this.litterMeshes.has(item.id)) continue;
+      const mesh = this.litterTemplates[item.kind].createInstance(item.id);
+      mesh.isPickable = false;
+      mesh.position.set(item.pos.x, y, item.pos.z);
+      mesh.rotation.y = (item.pos.x * 7 + item.pos.z * 3) % 6.28;
+      this.litterMeshes.set(item.id, mesh);
     }
   }
 
@@ -733,6 +841,7 @@ export class CityScene {
     this.engine.runRenderLoop(() => {
       onFrame(Math.min(this.engine.getDeltaTime() / 1000, 0.1));
       this.syncCars();
+      this.syncPeopleAndLitter();
       this.updateChase();
       this.updateLights();
       this.scene.render();
