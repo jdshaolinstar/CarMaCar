@@ -30,6 +30,7 @@ export class Twin {
   private readonly state = new Map<string, TwinStall>();
   private readonly frames: FrameReport[] = [];
   private readonly events: AgentEvent[] = [];
+  private readonly arrivedCars = new Set<string>();
   readonly trips = new Map<string, TripPlan>();
   readonly karma = new Map<string, number>();
   frameCount = 0;
@@ -104,9 +105,22 @@ export class Twin {
   }
 
   release(carId: string) {
+    this.arrivedCars.delete(carId);
     for (const t of this.state.values()) {
       if (t.reservedBy === carId) t.reservedBy = null;
     }
+  }
+
+  /**
+   * The holder has finished driving. The stall stays held so nobody else is sent there, but the map
+   * state does not change: it still takes a camera to mark a stall occupied.
+   */
+  markArrived(carId: string) {
+    this.arrivedCars.add(carId);
+  }
+
+  hasArrived(carId: string) {
+    return this.arrivedCars.has(carId);
   }
 
   snapshot(frameLimit: number, budgetExhausted: boolean): TwinSnapshot {

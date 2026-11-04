@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { pinhole, type CameraPose, type Stall } from '@carmacar/shared';
 import { Twin } from '../src/twin';
 import { generateCity } from '@carmacar/shared';
-import { analyzeFrame } from '../src/vision/stalls';
+import { analyzeFrame, lowerHull } from '../src/vision/stalls';
 import type { VehicleMask } from '../src/vision/provider';
 
 const stall = (id: string, cx: number): Stall => ({
@@ -46,6 +46,18 @@ test('a car in a stall marks that stall, and only that stall, occupied', () => {
   assert.equal(assignments.get('1'), 'S2');
   assert.notEqual(byId.S1, 'occupied');
   assert.notEqual(byId.S3, 'occupied');
+});
+
+test('the ground line runs between the wheels, not along the raised body', () => {
+  // Rows grow downward. Wheels reach row 100 at columns 10 and 90; the body stops at row 80.
+  const contour = [];
+  for (let col = 0; col <= 100; col++) {
+    contour.push({ col, row: col === 10 || col === 90 ? 100 : 80 });
+  }
+  const hull = lowerHull(contour);
+  assert.equal(hull.length, 101);
+  assert.equal(hull.find((p) => p.col === 50)?.row, 100);
+  assert.equal(hull.find((p) => p.col === 10)?.row, 100);
 });
 
 test('an empty view reports fully visible stalls as free', () => {

@@ -56,6 +56,8 @@ export interface Car {
 export interface ParkingService {
   find(carId: string, destinationId: string, from: Vec2, exclude: string[]): Promise<string | null>;
   release(carId: string): void;
+  /** The driver is done with their reservation. This does not tell the platform the stall's state. */
+  arrived(carId: string): void;
 }
 
 export interface ParkedRecord {
@@ -350,7 +352,7 @@ export class World {
         walkMeters: destination ? distance(stall.center, destination) : 0,
       });
     }
-    this.parking?.release(car.id);
+    this.parking?.arrived(car.id);
     car.leaveAt = this.time + PARKED_MIN_SECONDS + this.rng() * (PARKED_MAX_SECONDS - PARKED_MIN_SECONDS);
     if (car.role === 'hero') car.leaveAt = this.time + 40;
   }

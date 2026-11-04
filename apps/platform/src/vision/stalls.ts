@@ -9,7 +9,8 @@ const MIN_IN_FRAME = 0.95;
 const MIN_VISIBLE = 0.6;
 // A car's road contact can sit slightly outside the stall lines.
 const STREET_SIDE_SLACK = 1.2;
-const CURB_SIDE_SLACK = 0.6;
+/** Metres past the stall's center line, toward the curb, that a contact point may sit. */
+const NEAR_SIDE_LIMIT = 0.1;
 // Spike street frames measured 0.026 to 0.054 bytes per pixel.
 const MIN_JPEG_BYTES_PER_PIXEL = 0.015;
 
@@ -32,21 +33,49 @@ interface Located {
   covered(x: number, y: number): boolean;
 }
 
+/** The bottom envelope of a contour in image space, with one point per column. Rows grow downward. */
+export function lowerHull(points: { col: number; row: number }[]): { col: number; row: number }[] {
+  const hull: { col: number; row: number }[] = [];
+  for (const p of points) {
+    while (hull.length >= 2) {
+      const a = hull[hull.length - 2];
+      const b = hull[hull.length - 1];
+      if ((b.row - a.row) * (p.col - a.col) > (p.row - a.row) * (b.col - a.col)) break;
+      hull.pop();
+    }
+    hull.push(p);
+  }
+  const filled: { col: number; row: number }[] = [];
+  for (let i = 1; i < hull.length; i++) {
+    const a = hull[i - 1];
+    const b = hull[i];
+    for (let col = a.col; col < b.col; col++) {
+      filled.push({ col, row: a.row + ((b.row - a.row) * (col - a.col)) / (b.col - a.col) });
+    }
+  }
+  if (hull.length > 0) filled.push(hull[hull.length - 1]);
+  return filled;
+}
+
 function locate(mask: VehicleMask, cam: PinholeCamera): Located {
   const [left, top, right, bottom] = mask.box;
   const sx = (right - left) / mask.width;
   const sy = (bottom - top) / mask.height;
-  const ground: Vec2[] = [];
+  const contour: { col: number; row: number }[] = [];
   for (let col = 0; col < mask.width; col++) {
-    let lowest = -1;
     for (let row = mask.height - 1; row >= 0; row--) {
       if (mask.raster[row * mask.width + col]) {
-        lowest = row;
+        contour.push({ col, row });
         break;
       }
     }
-    if (lowest < 0) continue;
-    const point = cam.toGround(left + (col + 0.5) * sx, top + (lowest + 1) * sy);
+  }
+  // Only the wheels touch the road. The body floats about 0.3 m up, and from a low camera that
+  // reads as several metres too far away, landing the car in the next stall. The lower hull of
+  // the mask's bottom edge runs between the wheels, which is the true ground line.
+  const ground: Vec2[] = [];
+  for (const { col, row } of lowerHull(contour)) {
+    const point = cam.toGround(left + (col + 0.5) * sx, top + (row + 1) * sy);
     if (point) ground.push(point);
   }
   return {
@@ -69,7 +98,9 @@ function contactSpan(car: Located, stall: Stall): number {
     const s = dot(rel, stall.axis);
     const t = dot(rel, stall.normal);
     const inLength = Math.abs(s) < stall.length / 2;
-    const inWidth = t > -stall.width / 2 - STREET_SIDE_SLACK && t < stall.width / 2 + CURB_SIDE_SLACK;
+    // Only the car's street-facing side counts. Its far wheels and front rise up the image and
+    // back-project metres away, which used to land a car in the next stall along.
+    const inWidth = t > -stall.width / 2 - STREET_SIDE_SLACK && t < NEAR_SIDE_LIMIT;
     if (inLength && inWidth) along.push(s);
   }
   return along.length > 1 ? (Math.max(...along) - Math.min(...along)) / stall.length : 0;

@@ -39,6 +39,8 @@ const map = new LiveMap($('map') as HTMLCanvasElement, city);
 let twin: TwinSnapshot | null = null;
 let highlight: string | null = null;
 const frameImages = new Map<string, string>();
+const truthAtCapture = new Map<string, Set<string>>();
+const readings = { right: 0, falseFree: [] as string[], falseTaken: [] as string[] };
 let inFlight = 0;
 let frameLimitHit = false;
 
@@ -88,6 +90,7 @@ async function takePhoto() {
     const dataUrl = await scene.captureFrame(choice.pose);
     const capturedAt = Date.now();
     frameImages.set(`${choice.car.id}:${capturedAt}`, dataUrl);
+    truthAtCapture.set(`${choice.car.id}:${capturedAt}`, new Set(world.stallOwner.keys()));
     if (frameImages.size > 16) frameImages.delete(frameImages.keys().next().value!);
     const ok = await platform.sendFrame({
       scoutId: choice.car.id,
@@ -100,6 +103,22 @@ async function takePhoto() {
     console.warn('Photo failed', err);
   } finally {
     inFlight--;
+  }
+}
+
+/** Scores each reading against what was true when the photo was taken. Runs only in the browser. */
+function scoreReadings() {
+  for (const report of twin?.frames ?? []) {
+    const key = `${report.scoutId}:${report.capturedAt}`;
+    const truth = truthAtCapture.get(key);
+    if (!truth) continue;
+    truthAtCapture.delete(key);
+    for (const { id, state } of report.stalls) {
+      const occupied = truth.has(id);
+      if ((state === 'occupied') === occupied) readings.right++;
+      else if (state === 'free') readings.falseFree.push(id);
+      else readings.falseTaken.push(id);
+    }
   }
 }
 
@@ -149,6 +168,9 @@ function updateStats() {
   $('stat-seen').textContent = `${seen} of ${city.stalls.length}`;
   $('stat-accuracy').textContent = seen ? `${Math.round((100 * matches) / seen)}%` : 'No data';
   $('stat-frames').textContent = String(twin.usage.frames);
+  const total = readings.right + readings.falseFree.length + readings.falseTaken.length;
+  $('stat-readings').textContent = total ? `${((100 * readings.right) / total).toFixed(1)}%` : 'No data';
+  $('stat-karma').textContent = String(Object.values(twin.karma).reduce((sum, k) => sum + k, 0));
   showStatus(twin.usage.budgetExhausted ? "Today's camera budget is used up. The map has stopped updating." : twin.usage.frames >= twin.usage.frameLimit ? 'This session reached its photo limit. Reload to start a new city.' : null);
 }
 
@@ -198,6 +220,7 @@ async function pollTwin() {
   if (!twin) return;
   scene.setStallStates(twin.stalls);
   world.syncWithTwin(twin);
+  scoreReadings();
   updateStats();
   updateLog();
   showLatestFrame();
@@ -261,4 +284,4 @@ setInterval(() => void takePhoto(), 1000 / framesPerSecond);
 setInterval(() => void pollTwin(), 700);
 
 // For scripted test runs.
-Object.assign(window, { carmacar: { world, scene, hero, getTwin: () => twin, toggleStallCar } });
+Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar } });

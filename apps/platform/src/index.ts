@@ -116,7 +116,12 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
     });
     twin.karma.set(scoutId, (twin.karma.get(scoutId) ?? 0) + observations.length);
 
-    // A camera just showed a reserved stall is taken: move that driver to another.
+    // A camera confirmed a parked holder, so their reservation has done its job.
+    for (const o of observations) {
+      const holder = twin.stall(o.stallId)?.reservedBy;
+      if (o.state === 'occupied' && holder && twin.hasArrived(holder)) twin.release(holder);
+    }
+    // A camera just showed a reserved stall is taken by someone else: move that driver.
     for (const change of changes) {
       if (change.to !== 'occupied') continue;
       const holder = twin.stall(change.stallId)?.reservedBy;
@@ -180,6 +185,13 @@ app.post<{ Params: { id: string }; Body: { carId: string } }>('/v1/sessions/:id/
   const twin = getTwin(req.params.id);
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   twin.release(req.body.carId);
+  return { ok: true };
+});
+
+app.post<{ Params: { id: string }; Body: { carId: string } }>('/v1/sessions/:id/parking/arrived', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  twin.markArrived(req.body.carId);
   return { ok: true };
 });
 

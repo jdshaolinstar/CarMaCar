@@ -102,7 +102,9 @@ export class LiveMap {
     for (const d of city.destinations) {
       const [x, y] = this.px(d);
       const label = d.name.split(' ')[0];
-      const [dx, dy] = [d.normal.x * 26, -d.normal.z * 22];
+      // Labels near the edge of the map flip inward so they are not clipped.
+      const flip = x + d.normal.x * 60 < 0 || x + d.normal.x * 60 > canvas.width ? -1 : 1;
+      const [dx, dy] = [d.normal.x * 26 * flip, -d.normal.z * 22];
       ctx.lineWidth = 4;
       ctx.strokeStyle = '#2C3135';
       ctx.strokeText(label, x + dx, y + dy);

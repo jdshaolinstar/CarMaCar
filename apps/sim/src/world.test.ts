@@ -45,9 +45,10 @@ test('a perfect parking service beats cruising on the same demand', () => {
         return open[0]?.id ?? null;
       },
       release() {},
+      arrived() {},
     });
     const holder: { w?: World } = {};
-    const world = new World(city, 5, { find: (...a) => free(holder.w!).find(...a), release() {} });
+    const world = new World(city, 5, { find: (...a) => free(holder.w!).find(...a), release() {}, arrived() {} });
     holder.w = world;
     world.populateParked(0.75);
     world.setDemand(World.makeDemand(city, 7, 25, 60, share));

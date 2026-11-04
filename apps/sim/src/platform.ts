@@ -46,6 +46,10 @@ export class PlatformClient implements ParkingService {
     void fetch(this.url('/parking/release'), json({ carId }));
   }
 
+  arrived(carId: string) {
+    void fetch(this.url('/parking/arrived'), json({ carId }));
+  }
+
   async requestTrip(request: TripRequest): Promise<string | null> {
     const res = await fetch(this.url('/trips'), json(request));
     if (!res.ok) return null;

@@ -81,12 +81,14 @@ export class CityScene {
     this.scene.clearColor = new Color4(0.62, 0.78, 0.93, 1);
 
     const hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), this.scene);
-    hemi.intensity = 0.62;
+    hemi.intensity = 0.8;
     const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, 0.35), this.scene);
     sun.position = new Vector3(120, 180, -100);
-    sun.intensity = 0.72;
-    this.shadows = new ShadowGenerator(2048, sun);
-    this.shadows.useBlurExponentialShadowMap = true;
+    sun.intensity = 0.62;
+    this.shadows = new ShadowGenerator(4096, sun);
+    this.shadows.usePercentageCloserFiltering = true;
+    this.shadows.bias = 0.001;
+    this.shadows.normalBias = 0.02;
 
     this.overview = new ArcRotateCamera('overview', -Math.PI / 2, 0.5, 330, new Vector3(30, 0, 0), this.scene);
     this.overview.lowerRadiusLimit = 40;
