@@ -19,8 +19,8 @@ const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: num
   tes60: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
   tes100: { label: 'Everyone on TES', baseline: 'live-traffic', tesShare: 1, tesParking: true },
   lab60: { label: '60% on TES, Muse algorithm', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
-  tes30s: { label: '30% on TES', baseline: 'live-traffic', tesShare: 0.3, tesParking: true, shareAware: true },
-  tes60s: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true, shareAware: true },
+  tes30s: { label: '30% on TES, load fix', baseline: 'live-traffic', tesShare: 0.3, tesParking: true, shareAware: true },
+  tes60s: { label: '60% on TES, load fix', baseline: 'live-traffic', tesShare: 0.6, tesParking: true, shareAware: true },
   lab30: { label: '30% on TES, Muse algorithm', baseline: 'live-traffic', tesShare: 0.3, tesParking: true },
   tes60np: { label: '60% on TES, no parking guidance', baseline: 'live-traffic', tesShare: 0.6, tesParking: false },
 };

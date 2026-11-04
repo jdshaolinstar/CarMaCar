@@ -132,10 +132,14 @@ It simulates one morning commute on Los Angeles's real road network: about 214,0
 | Today's apps, routing on live traffic | 30.3 min | 32.5 min | 1,019,442 | 231,914 |
 | 30% on hand-tuned TES | 30.9 min | 33.4 min | 1,041,858 | 252,038 |
 | 60% on hand-tuned TES | 30.2 min | 32.3 min | 1,014,973 | 225,275 |
-| Everyone on hand-tuned TES | 28.3 min | 29.6 min | 944,271 | 164,939 |
+| 30% on hand-tuned TES, load fix | 29.4 min | 31.0 min | 984,996 | 199,436 |
+| 60% on hand-tuned TES, load fix | 28.6 min | 30.0 min | 956,974 | 176,460 |
 | **60% on Muse's algorithm** | **28.4 min** | **29.6 min** | **947,528** | **166,725** |
+| Everyone on hand-tuned TES | 28.3 min | 29.6 min | 944,271 | 164,939 |
 
-Hand-tuned TES only helps once everyone is on it, and at 30% it made things worse. Muse's algorithm reached the same result with 60% of drivers: 7.1% fewer vehicle-hours and 28.1% less delay than today's apps, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
+The original hand-tuned TES only helped once everyone was on it, and at 30% it made things worse. It counted only its own cars on each road, so at low adoption every road looked empty and its drivers piled onto the same routes. Measuring load against TES's share of each road fixed that: the fixed version gains 3.4% in vehicle-hours at 30% and 6.1% at 60%, and is identical at 100%.
+
+Muse's algorithm was written before that fix, by a model that was never told about the flaw. It came out slightly ahead of the fixed version, with 1.0% fewer vehicle-hours and 5.5% less delay, on one seed. Against today's apps it used 7.1% fewer vehicle-hours and had 28.1% less delay, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
 
 This is modeled, and not a forecast. It covers home-to-work commutes only, with assumed drive share, departure times and parking share. Small residential streets are absent, and drivers do not reroute mid-trip.
 
@@ -147,7 +151,9 @@ Three Muse calls run at once per round, and Muse works between rounds, never per
 
 Generated code runs in a tiny allowed language of road data, math, `if` and `return`. Loops, strings, globals and other calls cannot be written, and tests confirm 14 escape attempts are rejected. Each test runs in a separate process that does not have the API key. Production would add real isolation.
 
-An earlier test had Muse steer the routing system directly, with no measurable gain. Writing the algorithm is what worked. SimTest also understated this result: 3.36% against hand-tuned on held-out commuters at 20,000 cars, and far more at full size. That gap is not yet explained, so treat SimTest as a filter and not a forecast.
+Muse also has a settings mode. It starts from rough values, is never shown the hand-tuned ones, and tunes the standard formula. Its best settings used 1.20% fewer vehicle-hours than the hand-tuned values on held-out commuters at 20,000 cars, for about a third of a cent.
+
+An earlier test had Muse steer the routing system directly, with no measurable gain. Writing the algorithm is what worked. SimTest is a filter and not a forecast: its percentages did not carry over to full size, and that gap is not yet explained.
 
 The study also runs on other cities. Muse turned one sentence into a San Diego study area, and the same code built its network and ran a test.
 

@@ -1,7 +1,7 @@
 {
  "mode": "params",
  "model": "muse-spark-1.3-contributor",
- "status": "Held-out test: Early Preemptive Spread on commuters it never saw",
+ "status": "Finished",
  "simTest": {
   "cars": 20000,
   "capacity": 2,
@@ -10,9 +10,9 @@
   "trainSeed": 11,
   "heldOutSeed": 12
  },
- "tokens": 17874,
+ "tokens": 19582,
  "tokenBudget": 100000,
- "estimatedCostUsd": 0.0032929999999999995,
+ "estimatedCostUsd": 0.0035920999999999995,
  "references": {
   "apps": {
    "meanMinutes": 30.81535411519434,
@@ -201,7 +201,36 @@
   },
   "gainPercent": 3.622663396057016
  },
- "heldOut": null,
- "verdict": "",
- "lesson": ""
+ "heldOut": {
+  "winner": {
+   "meanMinutes": 29.644458747327224,
+   "rushMeanMinutes": 31.51650320580479,
+   "vehicleHours": 995147.4856426026,
+   "delayHours": 231609.13073621597,
+   "vehicleKm": 50838939.750452496,
+   "finishedShare": 0.994733515904782,
+   "seconds": 1731
+  },
+  "handTuned": {
+   "meanMinutes": 29.982775930109256,
+   "rushMeanMinutes": 32.0304266479057,
+   "vehicleHours": 1007246.1466239981,
+   "delayHours": 246490.73051560344,
+   "vehicleKm": 50844354.69625108,
+   "finishedShare": 0.9944175268590689,
+   "seconds": 1106
+  },
+  "apps": {
+   "meanMinutes": 30.726057651898653,
+   "rushMeanMinutes": 33.23299259947105,
+   "vehicleHours": 1033617.7824972745,
+   "delayHours": 271877.13126234367,
+   "vehicleKm": 50798485.38948057,
+   "finishedShare": 0.9932589003581209,
+   "seconds": 354
+  },
+  "gainPercent": 1.2011622999945721
+ },
+ "verdict": "Adopted: Early Preemptive Spread beat the hand-tuned system by 1.20% on commuters it never saw.",
+ "lesson": "Early preemptive spreading with balanced coordination gave the best travel time savings and held up on unseen commuters, along with ramp focused spreading, while late heavy peaking and staggered spreading offered little or made traffic worse. Next I would combine early spreading with ramp protection and explore finer control around the peak shoulders."
 }

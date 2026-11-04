@@ -272,9 +272,12 @@ function readable(code: string) {
 }
 
 /** The recorded sessions. Sessions run offline, because a static page has no simulator behind it. */
-async function startLab() {
+async function startLab(summary: Summary) {
   // Candidates differ by small amounts, so the Lab shows whole numbers instead of 1.0M.
   const exact = (n: number) => Math.round(n).toLocaleString('en-US');
+  const fullSize = summary.scenarios[0].runs;
+  const fixed = fullSize.find((r) => r.id === 'tes60s');
+  const muse = fullSize.find((r) => r.id === 'lab60');
   const sessions = new Map<string, LabSession>();
   for (const mode of LAB_MODES) {
     const res = await fetch(`${BASE}la-lab-${mode.id}.json`).catch(() => null);
@@ -331,6 +334,7 @@ async function startLab() {
       `SimTest used ${session.simTest.cars.toLocaleString('en-US')} cars, so its percentages only compare candidates with each other.`,
       held ? `On commuters it never saw: ${exact(held.apps.vehicleHours)} vehicle-hours with today's apps, ${exact(held.handTuned.vehicleHours)} with hand-tuned TES, ${exact(held.winner.vehicleHours)} with the Lab winner.` : '',
       session.mode === 'params' && session.references.rough && session.references.handTuned ? `Rough start ${exact(session.references.rough.vehicleHours)}, hand-tuned ${exact(session.references.handTuned.vehicleHours)} vehicle-hours in SimTest. Muse never saw the hand-tuned values.` : '',
+      fixed && muse ? `"Hand-tuned" here means the routing before its load fix. At full size with 60% of drivers, the fixed version used ${exact(fixed.vehicleHours)} vehicle-hours and Muse's algorithm ${exact(muse.vehicleHours)}.` : '',
       `Written by ${session.model}. Recorded session: this page replays it and does not run a model.`,
     ];
     $('lab-foot').textContent = foot.filter(Boolean).join(' ');
@@ -595,10 +599,11 @@ async function main() {
   }
   Object.assign(window, { metro: { view, setTime: (t: number) => (time = t), setPlaying: (p: boolean) => (playing = p), summary } });
   requestAnimationFrame(render);
+  return summary;
 }
 
 main()
-  .then(startLab)
+  .then((summary) => startLab(summary))
   .catch((err) => {
     $('scale').textContent = (err as Error).message;
   });
