@@ -19,11 +19,19 @@ const mode = (process.argv[2] ?? 'algorithm') as Mode;
 const ROUNDS = Number(process.argv[3] ?? 3);
 
 /** SimTest settings. Small enough to take minutes, and held the same for everything compared. */
-const SIMTEST = { cars: 20000, capacity: Number(process.env.LAB_CAPACITY ?? 2), tesShare: 0.6, rerouteSeconds: 600 };
-const TRAIN_SEED = 11;
-const HELD_OUT_SEED = 12;
+const SIMTEST = {
+  cars: 20000,
+  capacity: Number(process.env.LAB_CAPACITY ?? 2),
+  tesShare: Number(process.env.LAB_SHARE ?? 0.6),
+  // Same planning interval as the full-size runs.
+  rerouteSeconds: Number(process.env.LAB_REROUTE ?? 300),
+};
+const TRAIN_SEED = Number(process.env.LAB_TRAIN_SEED ?? 21);
+const HELD_OUT_SEED = Number(process.env.LAB_HELD_OUT_SEED ?? 22);
+/** Optional earlier session. Its winner is scored as a starting point and shown to Muse. */
+const PRIOR_FILE = process.env.LAB_PRIOR;
 const WORKERS = Number(process.env.LAB_WORKERS ?? 4);
-const JOB_TIMEOUT_MS = 30 * 60 * 1000;
+const JOB_TIMEOUT_MS = 50 * 60 * 1000;
 /** Spending stops here, whatever the round. At contributor prices this is about two cents. */
 const TOKEN_BUDGET = 100_000;
 /** On the held-out test, a gain below this is treated as no gain. */
@@ -61,7 +69,9 @@ interface Candidate {
 
 const root = new URL('../../../', import.meta.url);
 const labDir = new URL('apps/metro/data/runs/lab/', root);
-const outFile = new URL(`apps/sim/public/metro/la-lab-${mode}.json`, root);
+const sessionName = process.env.LAB_NAME ? `-${process.env.LAB_NAME}` : '';
+const outFile = new URL(`apps/sim/public/metro/la-lab-${mode}${sessionName}.json`, root);
+const prior = PRIOR_FILE ? (JSON.parse(readFileSync(PRIOR_FILE, 'utf8')).winner as { name: string; code: string }) : null;
 mkdirSync(labDir, { recursive: true });
 
 const session = {
@@ -172,7 +182,7 @@ const SYSTEM =
 
 function algorithmPrompt() {
   return `Write the body of a JavaScript function that receives "road" and returns its cost in seconds, a positive number.
-Fields of road: ${ROAD_FIELDS.join(', ')}. load is planned cars as a share of what the road can pass this interval. liveSeconds is the measured crossing time. hour is the clock hour, such as 7.5.
+Fields of road: ${ROAD_FIELDS.join(', ')}. load is planned connected cars as a share of the connected drivers' portion of what the road can pass this interval. liveSeconds is the measured crossing time. hour is the clock hour, such as 7.5.
 Allowed: const, let, if, else, return, numbers, arithmetic, comparisons, Math.abs, ceil, exp, floor, log, max, min, pow, round, sqrt. Nothing else exists: no loops, no strings, no other calls.
 The current algorithm, which you are trying to beat:
 return Math.max(road.liveSeconds, road.freeSeconds * (1 + 0.45 * Math.pow(road.load, 4)));`;
@@ -238,10 +248,12 @@ const startingPoints = await Promise.all([
   simTest(TRAIN_SEED, { tesShare: 0 }),
   simTest(TRAIN_SEED, { params: HAND_TUNED }),
   ...(mode === 'params' ? [simTest(TRAIN_SEED, { params: ROUGH })] : []),
+  ...(prior ? [simTest(TRAIN_SEED, { code: prior.code })] : []),
 ]);
 session.references.apps = startingPoints[0];
 session.references.handTuned = startingPoints[1];
 if (mode === 'params') session.references.rough = startingPoints[2];
+if (prior) session.references.prior = startingPoints[startingPoints.length - 1];
 save();
 console.log(`apps ${hours(startingPoints[0])}, hand-tuned ${hours(startingPoints[1])}${mode === 'params' ? `, rough ${hours(startingPoints[2])}` : ''}`);
 
@@ -249,6 +261,7 @@ const base = session.references.handTuned.vehicleHours;
 const history: string[] = [];
 if (mode === 'params') history.push(`Rough settings: ${hours(session.references.rough)} vehicle-hours.`);
 else history.push(`Current algorithm: ${hours(session.references.handTuned)} vehicle-hours.`);
+if (prior) history.push(`Your earlier algorithm, written before the meaning of load changed: ${hours(session.references.prior)} vehicle-hours.\n${prior.code}`);
 
 for (let round = 1; round <= ROUNDS; round++) {
   if (session.tokens >= TOKEN_BUDGET) {

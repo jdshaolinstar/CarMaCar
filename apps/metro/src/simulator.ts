@@ -48,7 +48,7 @@ export interface RunConfig {
   roadCost?: (road: RoadState) => number;
   /** How many batches TES plans each reroute, so each batch sees the plans of the last. */
   tesSlices?: number;
-  /** Measure load against TES's own share of each road. Otherwise a few TES cars see every road as empty. */
+  /** Set false to count load against the whole road, as early runs did. A few TES cars then see every road as empty. */
   shareAwareLoad?: boolean;
 }
 
@@ -406,7 +406,7 @@ export class MetroSim {
     const { cost, freeSeconds, observed, plannedVolume, n } = this;
     const weights = this.config.edgeWeights;
     const { sampleRate, rerouteSeconds, capacityScale, tesShare } = this.config;
-    const roadShare = this.config.shareAwareLoad ? Math.max(tesShare, MIN_ROAD_SHARE) : 1;
+    const roadShare = this.config.shareAwareLoad === false ? 1 : Math.max(tesShare, MIN_ROAD_SHARE);
     const roadCost = this.config.roadCost ?? this.standardCost;
     const road = this.roadState;
     road.hour = SIM_CLOCK_START_HOUR + this.planningTime / 3600;
