@@ -7,6 +7,7 @@ import { loadNetwork } from '../src/load';
 const cars = Number(process.argv[2] ?? 200000);
 const ids = (process.argv[3] ?? 'apps,tes30,tes60,tes100').split(',');
 const seed = Number(process.argv[4] ?? 1);
+const tag = process.env.TAG ? `-${process.env.TAG}` : '';
 const FRAME_MINUTES = 10;
 /** Very short segments add file size without changing the picture. */
 const MIN_LENGTH_METERS = 90;
@@ -60,7 +61,7 @@ let frames = 0;
 let sampleRate = 1;
 let drivers = 0;
 for (const id of ids) {
-  const name = `la-${cars}-${id}-s${seed}`;
+  const name = `la-${cars}-${id}-s${seed}${tag}`;
   const run = JSON.parse(readFileSync(new URL(`../data/runs/${name}.json`, import.meta.url), 'utf8'));
   const raw = readFileSync(new URL(`../data/runs/${name}.bin`, import.meta.url));
   frames = run.perFrame.length;

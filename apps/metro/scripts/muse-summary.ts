@@ -16,7 +16,8 @@ const JAMMED = 0.48;
 const ROADS = 10;
 
 const network = loadNetwork('la');
-const runFile = (id: string, ext: string) => new URL(`../data/runs/la-${cars}-${id}-s${seed}.${ext}`, import.meta.url);
+const tag = process.env.TAG ? `-${process.env.TAG}` : '';
+const runFile = (id: string, ext: string) => new URL(`../data/runs/la-${cars}-${id}-s${seed}${tag}.${ext}`, import.meta.url);
 
 /** Road-km jammed, summed over the morning and grouped by road name, from the stored frames. */
 function jammedRoads(id: string) {
