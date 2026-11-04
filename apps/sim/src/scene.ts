@@ -32,7 +32,7 @@ const OVERLAY_LAYER = 0x10000000;
 /** City view distance for the demo town, and that town's width. Larger cities scale from these. */
 const HOME_RADIUS = 330;
 const HOME_SPAN = 372;
-const UPPER_RADIUS_RATIO = 1.39;
+const UPPER_RADIUS_RATIO = 460 / 330;
 const SKYLINE_BETA = 0.95;
 const WORLD_LAYER = 0x0fffffff;
 /** Hidden from people by the garage level view. Capture cameras still see it. */
