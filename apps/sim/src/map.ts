@@ -22,7 +22,7 @@ export class LiveMap {
   ) {
     this.ctx = canvas.getContext('2d')!;
     const xs = city.nodes.map((n) => n.x);
-    const zs = city.nodes.map((n) => n.z);
+    const zs = [...city.nodes.map((n) => n.z), ...city.garages.flatMap((g) => [g.z - g.depth / 2, g.z + g.depth / 2])];
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minZ = Math.min(...zs);
@@ -89,8 +89,28 @@ export class LiveMap {
       ctx.stroke();
     }
 
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const g of city.garages) {
+      const w = g.width * this.k;
+      const h = g.depth * this.k;
+      const [cx, cy] = this.px(g);
+      ctx.fillStyle = '#3F474D';
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+      const open = Array.from({ length: g.levels }, (_, level) =>
+        city.stalls.filter((s) => s.garageId === g.id && s.level === level && twin?.stalls[s.id]?.state === 'free').length,
+      );
+      ctx.fillStyle = '#F4F5F2';
+      ctx.font = '700 17px Overpass, Arial, sans-serif';
+      ctx.fillText(g.name, cx, cy - 10);
+      ctx.fillStyle = '#1FA35C';
+      ctx.font = '700 16px Overpass, Arial, sans-serif';
+      ctx.fillText(open.map((n, i) => `L${i + 1}: ${n}`).join('  '), cx, cy + 11);
+    }
+
     ctx.lineWidth = 9;
     for (const s of city.stalls) {
+      if (s.garageId) continue;
       const state = twin?.stalls[s.id]?.state ?? 'unknown';
       const half = scale(s.axis, s.length * 0.42);
       ctx.strokeStyle = COLORS[state];
@@ -141,7 +161,7 @@ export class LiveMap {
     }
 
     for (const car of world.cars.values()) {
-      if (car.phase === 'parked') continue;
+      if (car.phase === 'parked' || (car.insideGarage && car.id !== selected)) continue;
       const [x, y] = this.px(car.pos);
       ctx.fillStyle = ROLE_COLORS[car.role] ?? '#fff';
       ctx.beginPath();

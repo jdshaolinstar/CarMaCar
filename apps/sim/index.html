@@ -61,11 +61,18 @@
         <button id="view-chase" type="button" aria-pressed="false">Behind car</button>
         <button id="view-dash" type="button" aria-pressed="false">Dashboard</button>
         <label class="check"><input id="toggle-labels" type="checkbox" checked />Labels</label>
+        <label class="check">Garage view
+          <select id="garage-view">
+            <option value="2">All levels</option>
+            <option value="1">Level 2</option>
+            <option value="0">Level 1</option>
+          </select>
+        </label>
       </div>
       <p class="selected">Click any car to view it. Viewing: <b id="selected-car">Your car</b></p>
       <div class="drive-row">
         <button id="drive" type="button" aria-pressed="false">Drive this car</button>
-        <p class="hint" id="drive-help" hidden>Arrows or WASD to drive, Space to brake, P to park.</p>
+        <p class="hint" id="drive-help" hidden>Arrows or WASD to drive, Space to brake, P to park, 1 to 3 on the blue pad to change level.</p>
       </div>
       <ol class="log" id="log" aria-live="polite"></ol>
       <form id="trip">

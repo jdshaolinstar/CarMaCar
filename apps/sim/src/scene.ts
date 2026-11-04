@@ -21,13 +21,15 @@ import {
 } from '@babylonjs/core';
 import { add, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
 import type { LightState } from './signals';
-import type { Car, World } from './world';
+import { LIFT_SECONDS, type Car, type World } from './world';
 
 export type CameraView = 'city' | 'chase' | 'dash';
 
 /** Everything on this layer is invisible to capture cameras, so overlays cannot leak into frames. */
 const OVERLAY_LAYER = 0x10000000;
 const WORLD_LAYER = 0x0fffffff;
+/** Hidden from people by the garage level view. Capture cameras still see it. */
+const CAPTURE_ONLY_LAYER = 0x40000000;
 /** Building labels: shown to people, hidden from capture cameras. */
 const LABEL_LAYER = 0x20000000;
 const FRAME_WIDTH = 1280;
@@ -73,6 +75,8 @@ export class CityScene {
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
   private view: CameraView = 'city';
+  private readonly garageParts: { mesh: Mesh; level: number }[] = [];
+  private garageTopLevel = Infinity;
   private routeLine: Mesh | null = null;
   private readonly labels: Mesh[] = [];
   private readonly lights: { nodeId: string; dir: Vec2; lamp: Mesh; bar: Mesh }[] = [];
@@ -92,6 +96,8 @@ export class CityScene {
 
     const hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), this.scene);
     hemi.intensity = 0.8;
+    // Bounced light, so garage ceilings are not pitch black.
+    hemi.groundColor = new Color3(0.6, 0.6, 0.6);
     const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, 0.35), this.scene);
     sun.position = new Vector3(120, 180, -100);
     sun.intensity = 0.62;
@@ -119,7 +125,7 @@ export class CityScene {
     this.capture.fov = FOV_Y;
     this.capture.minZ = 0.1;
     this.capture.maxZ = 500;
-    this.capture.layerMask = WORLD_LAYER;
+    this.capture.layerMask = WORLD_LAYER | CAPTURE_ONLY_LAYER;
 
     this.scene.activeCamera = this.overview;
 
@@ -140,11 +146,88 @@ export class CityScene {
       unknown: this.overlayMaterial('unknown'),
     };
     this.buildGround();
+    this.buildGarages();
     this.buildBuildings();
     this.buildStalls();
     this.buildDestinationSigns();
     this.buildBuildingLabels();
     this.buildSignals();
+  }
+
+  private garageAt(x0: number, x1: number, z0: number, z1: number) {
+    return this.city.garages.some((g) => g.x > x0 && g.x < x1 && g.z > z0 && g.z < z1);
+  }
+
+  private floorY(level: number | undefined) {
+    return (level ?? 0) * (this.city.garages[0]?.floorHeight ?? 0);
+  }
+
+  /** Concrete decks, pillars, low walls and the transporter pad. Purely visual. */
+  private buildGarages() {
+    const concrete = this.solid('#8b8f93');
+    const deck = this.solid('#5f6368');
+    const pad = new StandardMaterial('transporter', this.scene);
+    pad.diffuseColor = Color3.FromHexString('#37D3E8');
+    pad.emissiveColor = Color3.FromHexString('#37D3E8').scale(0.6);
+    pad.specularColor = Color3.Black();
+    const glow = this.lampMaterial('#F4F5F2');
+
+    for (const g of this.city.garages) {
+      const rotation = Math.atan2(g.inward.x, g.inward.z);
+      const place = (mesh: Mesh, u: number, v: number, y: number, level: number) => {
+        const p = add(add(g.door, scale(g.aisle, u)), scale(g.inward, v));
+        mesh.position.set(p.x, y, p.z);
+        mesh.rotation.y = rotation;
+        mesh.isPickable = false;
+        this.garageParts.push({ mesh, level });
+      };
+      const box = (w: number, h: number, d: number, u: number, v: number, y: number, level: number, material: StandardMaterial) => {
+        const b = MeshBuilder.CreateBox('garage', { width: w, height: h, depth: d }, this.scene);
+        b.material = material;
+        place(b, u, v, y, level);
+      };
+      for (let level = 0; level < g.levels; level++) {
+        const y = level * g.floorHeight;
+        if (level === 0) box(g.width, 0.04, g.depth, 0, g.depth / 2, 0.02, level, deck);
+        else box(g.width, 0.3, g.depth, 0, g.depth / 2, y - 0.15, level, deck);
+
+        // Low walls, leaving the door open on the ground floor.
+        box(0.3, 1.1, g.depth, -g.width / 2, g.depth / 2, y + 0.55, level, concrete);
+        box(0.3, 1.1, g.depth, g.width / 2, g.depth / 2, y + 0.55, level, concrete);
+        box(g.width, 1.1, 0.3, 0, g.depth, y + 0.55, level, concrete);
+        if (level === 0) {
+          box(g.width / 2 - 4, 1.1, 0.3, -(g.width / 4 + 2), 0, y + 0.55, level, concrete);
+          box(g.width / 2 - 4, 1.1, 0.3, g.width / 4 + 2, 0, y + 0.55, level, concrete);
+        } else {
+          box(g.width, 1.1, 0.3, 0, 0, y + 0.55, level, concrete);
+        }
+
+        if (level < g.levels - 1) {
+          for (const u of [-29, -14.5, 14.5, 29]) {
+            for (const v of [1, g.depth - 1]) box(0.6, g.floorHeight, 0.6, u, v, y + g.floorHeight / 2, level, concrete);
+          }
+          box(40, 0.06, 0.4, 0, 21, y + g.floorHeight - 0.34, level, glow);
+        }
+
+        const disc = MeshBuilder.CreateDisc('transporter', { radius: 3.2, tessellation: 28 }, this.scene);
+        disc.rotation.x = Math.PI / 2;
+        disc.bakeCurrentTransformIntoVertices();
+        disc.material = pad;
+        place(disc, 0, 8, y + 0.05, level);
+      }
+    }
+  }
+
+  /** Hides upper floors from people so they can see inside. Capture cameras still see everything. */
+  setGarageView(topLevel: number) {
+    this.garageTopLevel = topLevel;
+    for (const { mesh, level } of this.garageParts) {
+      mesh.layerMask = level > topLevel ? CAPTURE_ONLY_LAYER : WORLD_LAYER;
+    }
+    for (const [id, marker] of this.stallMarkers) {
+      const level = this.world.stalls.get(id)?.level ?? 0;
+      marker.setEnabled(level <= topLevel);
+    }
   }
 
   private overlayMaterial(state: StallState) {
@@ -191,6 +274,7 @@ export class CityScene {
     const parts: Mesh[] = [];
     for (let i = 0; i < xLines.length - 1; i++) {
       for (let j = 0; j < zLines.length - 1; j++) {
+        if (this.garageAt(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1])) continue;
         const w = xLines[i + 1] - xLines[i] - edge * 2;
         const d = zLines[j + 1] - zLines[j] - edge * 2;
         const block = MeshBuilder.CreateBox('block', { width: w, depth: d, height: 0.3 }, this.scene);
@@ -273,7 +357,11 @@ export class CityScene {
     const xLines = [xs[0] - SPACING_X, ...xs, xs[xs.length - 1] + SPACING_X];
     const zLines = [zs[0] - SPACING_Z, ...zs, zs[zs.length - 1] + SPACING_Z];
     for (let i = 0; i < xLines.length - 1; i++) {
-      for (let j = 0; j < zLines.length - 1; j++) fillBlock(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1]);
+      for (let j = 0; j < zLines.length - 1; j++) {
+        if (!this.garageAt(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1])) {
+          fillBlock(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1]);
+        }
+      }
     }
 
     palettes.forEach(([wall, glass], i) => {
@@ -297,14 +385,14 @@ export class CityScene {
       for (const sign of [-0.5, 0.5]) {
         const end = add(s.center, scale(s.axis, sign * s.length));
         const line = MeshBuilder.CreateGround('stall-line', { width: s.width, height: 0.12 }, this.scene);
-        line.position.set(end.x, 0.02, end.z);
+        line.position.set(end.x, this.floorY(s.level) + 0.06, end.z);
         line.rotation.y = rotation;
         line.material = white;
         line.isPickable = false;
       }
       // The overlay only the overview camera can see.
       const marker = MeshBuilder.CreateGround(`stall-${s.id}`, { width: s.width * 0.9, height: s.length * 0.9 }, this.scene);
-      marker.position.set(s.center.x, 0.06, s.center.z);
+      marker.position.set(s.center.x, this.floorY(s.level) + 0.1, s.center.z);
       marker.rotation.y = rotation;
       marker.material = this.stallMaterials.unknown;
       marker.layerMask = OVERLAY_LAYER;
@@ -340,7 +428,11 @@ export class CityScene {
 
   /** Floating names above each destination. On their own layer, so cameras never see them. */
   private buildBuildingLabels() {
-    for (const d of this.city.destinations) {
+    const places = [
+      ...this.city.destinations.map((d) => ({ id: d.id, name: d.name, spot: add(d, scale(d.normal, 8)), y: 26 })),
+      ...this.city.garages.map((g) => ({ id: g.id, name: g.name, spot: { x: g.x, z: g.z }, y: 18 })),
+    ];
+    for (const d of places) {
       const tex = new DynamicTexture(`label-${d.id}`, { width: 640, height: 112 }, this.scene, true);
       tex.hasAlpha = true;
       const ctx = tex.getContext() as CanvasRenderingContext2D;
@@ -367,8 +459,7 @@ export class CityScene {
       plate.isPickable = false;
       plate.billboardMode = Mesh.BILLBOARDMODE_ALL;
       plate.layerMask = LABEL_LAYER;
-      const pos = add(d, scale(d.normal, 8));
-      plate.position.set(pos.x, 26, pos.z);
+      plate.position.set(d.spot.x, d.y, d.spot.z);
       this.labels.push(plate);
     }
   }
@@ -486,6 +577,14 @@ export class CityScene {
     return merged;
   }
 
+  /** Height of a car, including its ride on the transporter. */
+  private carHeight(car: Car) {
+    const y = this.floorY(car.level);
+    if (car.liftT <= 0) return y;
+    const from = this.floorY(car.liftFrom);
+    return y + (from - y) * (car.liftT / LIFT_SECONDS);
+  }
+
   private syncCars() {
     for (const [id, mesh] of this.carMeshes) {
       if (!this.world.cars.has(id)) {
@@ -502,8 +601,9 @@ export class CityScene {
         this.shadows.addShadowCaster(mesh);
         this.carMeshes.set(car.id, mesh);
       }
-      mesh.position.set(car.pos.x, 0, car.pos.z);
+      mesh.position.set(car.pos.x, this.carHeight(car), car.pos.z);
       mesh.rotation.y = Math.atan2(car.heading.x, car.heading.z);
+      mesh.layerMask = car.level > this.garageTopLevel ? CAPTURE_ONLY_LAYER : WORLD_LAYER;
     }
   }
 
@@ -524,16 +624,20 @@ export class CityScene {
   private updateChase() {
     const car = this.followId ? this.world.cars.get(this.followId) : null;
     if (!car) return;
+    const floor = this.carHeight(car);
     if (this.view === 'dash') {
       const eye = add(car.pos, scale(car.heading, 2.7));
-      this.chase.position.set(eye.x, 1.25, eye.z);
+      this.chase.position.set(eye.x, floor + 1.25, eye.z);
       const look = add(car.pos, scale(car.heading, 30));
-      this.chase.setTarget(new Vector3(look.x, 1.1, look.z));
+      this.chase.setTarget(new Vector3(look.x, floor + 1.1, look.z));
     } else {
-      const eye = add(car.pos, scale(car.heading, -9));
-      this.chase.position.set(eye.x, 4.2, eye.z);
+      // Under a garage ceiling the camera has to sit lower and closer.
+      const back = car.insideGarage ? 6.5 : 9;
+      const height = car.insideGarage ? 2.5 : 4.2;
+      const eye = add(car.pos, scale(car.heading, -back));
+      this.chase.position.set(eye.x, floor + height, eye.z);
       const look = add(car.pos, scale(car.heading, 10));
-      this.chase.setTarget(new Vector3(look.x, 1.2, look.z));
+      this.chase.setTarget(new Vector3(look.x, floor + 1.2, look.z));
     }
   }
 
@@ -594,6 +698,7 @@ export class CityScene {
   // which collides with the render loop and leaves ghost trails on screen.
   private renderFrame(pose: CameraPose): Promise<string> {
     return new Promise((resolve, reject) => {
+      this.capture.fov = pose.fovY;
       this.capture.position.set(...pose.position);
       this.capture.setTarget(new Vector3(...pose.target));
       this.capture.getViewMatrix(true);

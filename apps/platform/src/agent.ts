@@ -132,7 +132,10 @@ function runTool(name: string, args: any, ctx: AgentContext): { result: unknown;
       const d = byId(args.destination_id);
       if (!d) return { result: { error: 'Unknown destination' } };
       const found = twin.findParking(d, args.exclude_stall_ids ?? []);
-      return { result: found ? { stall_id: found.stall.id, walk_meters: found.walkMeters } : { stall_id: null } };
+      if (!found) return { result: { stall_id: null } };
+      const garage = city.garages.find((g) => g.id === found.stall.garageId);
+      const where = garage ? `${garage.name}, level ${(found.stall.level ?? 0) + 1}` : 'street parking';
+      return { result: { stall_id: found.stall.id, walk_meters: found.walkMeters, where } };
     }
     case 'reserve_stall':
       return { result: { reserved: twin.reserve(args.stall_id, trip.carId) } };

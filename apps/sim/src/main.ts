@@ -16,6 +16,7 @@ let framesPerSecond = Number(params.get('fps') ?? 1);
 const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
+let garageVisionOn = true;
 let agentOn = true;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -52,18 +53,43 @@ let frameLimitHit = false;
 
 /** Which side of the street has stalls near this car, if any. */
 function stallSideFor(car: Car): { side: Vec2; stallIds: string[] } | null {
-  if (car.phase !== 'drive') return null;
+  if (car.phase !== 'drive' || car.insideGarage) return null;
   const graph = world.graph;
   const seg = graph.segmentBetween(car.edge.from, car.edge.to);
   const dir = graph.edgeDir(car.edge);
   if (dot(car.heading, dir) < 0.98) return null;
-  const nearby = city.stalls.filter((s) => s.segmentId === seg.id && distance(s.center, car.pos) < 26);
+  const nearby = city.stalls.filter((s) => !s.garageId && s.segmentId === seg.id && distance(s.center, car.pos) < 26);
   if (nearby.length === 0) return null;
   const onRight = dot(nearby[0].normal, rightOf(car.heading)) > 0;
   return { side: scale(rightOf(car.heading), onRight ? 1 : -1), stallIds: nearby.map((s) => s.id) };
 }
 
 /** Every network car is a camera. The one looking at the stalest stalls goes next. */
+const garageCameras = city.garages.flatMap((g) =>
+  g.cameras.map((camera, index) => ({ id: `${g.id}-cam${index + 1}`, garage: g, camera })),
+);
+let photosTaken = 0;
+let nextGarageCamera = 0;
+
+/** Every third photo comes from a fixed garage camera, taking turns. */
+function chooseGarageCamera(): { id: string; pose: CameraPose } | null {
+  if (!garageVisionOn || garageCameras.length === 0) return null;
+  const { id, garage, camera } = garageCameras[nextGarageCamera++ % garageCameras.length];
+  return {
+    id,
+    pose: {
+      position: camera.position,
+      target: camera.target,
+      fovY: camera.fovY,
+      width: 1280,
+      height: 720,
+      garageId: garage.id,
+      level: camera.level,
+      floorY: camera.level * garage.floorHeight,
+    },
+  };
+}
+
 function chooseCamera(): { car: Car; pose: CameraPose } | null {
   let best: { car: Car; side: Vec2 } | null = null;
   let bestAge = -1;
@@ -92,20 +118,23 @@ function chooseCamera(): { car: Car; pose: CameraPose } | null {
 
 async function takePhoto() {
   if (!platform || !visionOn || inFlight >= 3 || frameLimitHit) return;
-  const choice = chooseCamera();
-  if (!choice) return;
+  const fromGarage = ++photosTaken % 3 === 0 ? chooseGarageCamera() : null;
+  const fromCar = fromGarage ? null : chooseCamera();
+  const pose = fromGarage?.pose ?? fromCar?.pose;
+  const scoutId = fromGarage?.id ?? fromCar?.car.id;
+  if (!pose || !scoutId) return;
   inFlight++;
-  choice.car.metersSinceCapture = 0;
+  if (fromCar) fromCar.car.metersSinceCapture = 0;
   try {
-    const dataUrl = await scene.captureFrame(choice.pose);
+    const dataUrl = await scene.captureFrame(pose);
     const capturedAt = Date.now();
-    frameImages.set(`${choice.car.id}:${capturedAt}`, dataUrl);
-    truthAtCapture.set(`${choice.car.id}:${capturedAt}`, new Set(world.stallOwner.keys()));
+    frameImages.set(`${scoutId}:${capturedAt}`, dataUrl);
+    truthAtCapture.set(`${scoutId}:${capturedAt}`, new Set(world.stallOwner.keys()));
     if (frameImages.size > 16) frameImages.delete(frameImages.keys().next().value!);
     const ok = await platform.sendFrame({
-      scoutId: choice.car.id,
+      scoutId,
       jpeg: dataUrl.split(',')[1],
-      pose: choice.pose,
+      pose,
       capturedAt,
     });
     if (!ok) frameLimitHit = (twin?.usage.frames ?? 0) >= (twin?.usage.frameLimit ?? Infinity) || !!twin?.usage.budgetExhausted;
@@ -309,12 +338,23 @@ $('view-dash').addEventListener('click', () => setView('dash'));
 const labelsToggle = $('toggle-labels') as HTMLInputElement;
 labelsToggle.addEventListener('change', () => scene.setLabelsVisible(labelsToggle.checked));
 
+const garageView = $('garage-view') as HTMLSelectElement;
+garageView.addEventListener('change', () => scene.setGarageView(Number(garageView.value)));
+
 // The systems panel. Every switch here changes something real.
 const systems: SystemDef[] = [
   {
     id: 'vision',
     name: 'Camera vision',
     description: 'Turns car photos into the parking map.',
+    layer: 'production',
+    engine: 'Meta SAM 3.1 with geometry code',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'garageCameras',
+    name: 'Garage cameras',
+    description: 'Fixed cameras on every garage level.',
     layer: 'production',
     engine: 'Meta SAM 3.1 with geometry code',
     control: { type: 'toggle', value: true },
@@ -389,7 +429,8 @@ function applySystem(id: string, value: boolean | number | string) {
   if (id === 'vision') {
     visionOn = value as boolean;
     $('map-note').hidden = visionOn;
-  } else if (id === 'photoRate') framesPerSecond = value as number;
+  } else if (id === 'garageCameras') garageVisionOn = value as boolean;
+  else if (id === 'photoRate') framesPerSecond = value as number;
   else if (id === 'guidance') world.guidance = value as boolean;
   else if (id === 'agent') {
     agentOn = value as boolean;
@@ -420,10 +461,11 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (!driving) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
-  if (e.code === 'KeyP') {
-    const car = world.cars.get(selectedId);
-    if (car) world.togglePark(car);
-  }
+  const car = world.cars.get(selectedId);
+  if (!car) return;
+  if (e.code === 'KeyP') world.togglePark(car);
+  const digit = /^Digit([1-9])$/.exec(e.code);
+  if (digit) world.useTransporter(car, Number(digit[1]) - 1);
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());

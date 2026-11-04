@@ -1,5 +1,5 @@
 // Turn-by-turn directions for a car, using the same road graph the platform plans on.
-import { dot, sub, type DirectedEdge, type Path } from '@carmacar/shared';
+import { distance, dot, Path, sub, type DirectedEdge } from '@carmacar/shared';
 import { movementOf } from './signals';
 import type { Car, World } from './world';
 
@@ -23,6 +23,27 @@ export function navigate(world: World, car: Car): NavStep | null {
   if (!stall && !destination) return null;
 
   const graph = world.graph;
+  if (stall?.garageId && car.insideGarage) {
+    const g = graph.garage(stall.garageId);
+    const level = stall.level ?? 0;
+    if (car.level !== level) {
+      const atPad = distance(car.pos, g.pad) < 5;
+      return {
+        icon: 'park',
+        distance: atPad ? 'Here' : 'Transporter',
+        instruction: atPad ? `Stop, then press ${level + 1} for level ${level + 1}` : 'Drive onto the blue pad',
+        path: Path.from([car.pos, g.pad]),
+      };
+    }
+    const close = distance(car.pos, stall.center) < 5;
+    return {
+      icon: close ? 'park' : 'arrive',
+      distance: close ? 'Here' : roundDistance(distance(car.pos, stall.center)),
+      instruction: close ? `Press P to park in ${stall.id}` : `Stall ${stall.id} on level ${level + 1}`,
+      path: Path.from([car.pos, stall.center]),
+    };
+  }
+
   const start = car.edge;
   const along = dot(sub(car.pos, graph.node(start.from)), graph.edgeDir(start));
   const segment = destination ? graph.segment(destination.segmentId) : null;
@@ -36,6 +57,10 @@ export function navigate(world: World, car: Car): NavStep | null {
 
   if (chain.length === 1) {
     const left = goalAlong - along;
+    if (stall?.garageId) {
+      const name = graph.garage(stall.garageId).name;
+      return { icon: 'right', distance: roundDistance(left), instruction: `Turn right into ${name}`, path };
+    }
     if (stall && left < 9) return { icon: 'park', distance: 'Here', instruction: `Press P to park in ${stall.id}`, path };
     const place = stall ? `Stall ${stall.id}` : destination!.name;
     return { icon: 'arrive', distance: roundDistance(left), instruction: `${place} is ahead`, path };

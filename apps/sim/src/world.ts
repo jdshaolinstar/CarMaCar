@@ -125,7 +125,7 @@ const CLAIM_MARGIN = 2;
 const GARAGE_SPEED = 5;
 const GARAGE_LANE_OFFSET = 1.6;
 const GARAGE_MERGE_AHEAD = 8;
-const LIFT_SECONDS = 1.6;
+export const LIFT_SECONDS = 1.6;
 const PAD_REACH = 5;
 const LANDING_LENGTH = 6;
 /** Street traffic covers this in about 3 seconds, the time a car takes to pull out. */

@@ -55,6 +55,7 @@ export interface GarageCamera {
   level: number;
   position: [number, number, number];
   target: [number, number, number];
+  fovY: number;
 }
 
 export interface Garage extends Vec2 {
@@ -115,7 +116,11 @@ const GARAGE_STALLS_PER_SIDE = 7;
 const AISLE_HALF_WIDTH = 3.5;
 const PAD_DEPTH = 8;
 const HUB_DEPTH = 21;
-const CAMERA_HEIGHT = 2.9;
+const CAMERA_HEIGHT = 3.15;
+const CAMERA_SPREAD = 14;
+/** Mounted across the aisle from the row it watches, with a wide lens, like real garage cameras. */
+const CAMERA_SETBACK = 3.2;
+const CAMERA_FOV = 1.25;
 
 const GARAGE_SPECS = [
   { id: 'GA', name: 'Garage A', segment: 'H1-1', door: { x: 0, z: 15 }, inward: { x: 0, z: 1 }, entryFromEnd: true },
@@ -209,10 +214,18 @@ export function generateCity(): CityMap {
     const cameras: GarageCamera[] = [];
     for (let level = 0; level < GARAGE_LEVELS; level++) {
       const floor = level * GARAGE_FLOOR_HEIGHT;
-      for (const side of [-1, 1]) {
-        const eye = local(side * 28, HUB_DEPTH);
-        const look = local(side * 6, HUB_DEPTH);
-        cameras.push({ level, position: [eye.x, floor + CAMERA_HEIGHT, eye.z], target: [look.x, floor + 0.4, look.z] });
+      // Over the aisle, angled down at each stall row. From the end of an aisle cars hide each other.
+      for (const row of [-1, 1]) {
+        for (const side of [-1, 1]) {
+          const eye = local(side * CAMERA_SPREAD, HUB_DEPTH - row * CAMERA_SETBACK);
+          const look = local(side * CAMERA_SPREAD, HUB_DEPTH + row * 6.2);
+          cameras.push({
+            level,
+            position: [eye.x, floor + CAMERA_HEIGHT, eye.z],
+            target: [look.x, floor + 0.2, look.z],
+            fovY: CAMERA_FOV,
+          });
+        }
       }
     }
     const garage: Garage = {
