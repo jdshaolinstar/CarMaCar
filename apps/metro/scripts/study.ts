@@ -19,6 +19,7 @@ const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: num
   tes60: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
   tes100: { label: 'Everyone on TES', baseline: 'live-traffic', tesShare: 1, tesParking: true },
   lab60: { label: '60% on TES, Lab winner', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
+  tes60np: { label: '60% on TES, no parking guidance', baseline: 'live-traffic', tesShare: 0.6, tesParking: false },
 };
 
 /** A finished Lab session, for applying its winner at full size. Set LAB to its JSON file. */
