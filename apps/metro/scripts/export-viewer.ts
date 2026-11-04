@@ -10,7 +10,7 @@ const seed = Number(process.argv[3] ?? 1);
 const SCENARIOS = JSON.parse(
   process.env.SCENARIOS ??
     JSON.stringify([
-      { id: 'typical', label: 'Typical morning', tag: 'cap2.5', runs: ['apps', 'tes30', 'tes60', 'tes100'] },
+      { id: 'typical', label: 'Typical morning', tag: 'cap2.6', runs: ['apps', 'tes30', 'tes60', 'tes100'] },
       { id: 'heavy', label: 'Heavier traffic', tag: 'cap2.3', runs: ['apps', 'tes30', 'tes100'] },
     ]),
 ) as { id: string; label: string; tag: string; runs: string[] }[];

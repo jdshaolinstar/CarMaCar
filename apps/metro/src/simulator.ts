@@ -105,6 +105,11 @@ export interface RunResult {
   /** Minutes spent waiting to join the first road. Large values mean the entry points are too few. */
   meanEntryWaitMinutes: number;
   rushMeanMinutes: number;
+  /** The typical driver. A small tail of stuck trips cannot move this the way it moves the mean. */
+  medianMinutes: number;
+  /** Mean of trips that arrived. Compare with meanMinutes to see how much the unfinished tail adds. */
+  finishedMeanMinutes: number;
+  p90Minutes: number;
   vehicleHours: number;
   vehicleKm: number;
   delayHours: number;
@@ -702,16 +707,21 @@ export class MetroSim {
     let entryTotal = 0;
     let rushTotal = 0;
     let rushCount = 0;
+    let finishedTotal = 0;
+    const allMinutes = new Float32Array(order.length);
     // Clock zero is 5 AM, so this window is departures from 7 to 9 AM.
     const rushStart = 2 * 3600;
     const rushEnd = 4 * 3600;
-    for (const car of order) {
+    for (let i = 0; i < order.length; i++) {
+      const car = order[i];
       const trip = trips[car];
       // Queueing to join the first road counts: that wait is real. So do unfinished trips, up to the horizon.
       const end = this.done[car] ? this.tripEnd[car] : config.horizonSeconds;
       const driveEnd = this.driveEnd[car] || config.horizonSeconds;
       const minutes = (end - trip.depart + ACCESS_SECONDS) / 60;
       total += minutes;
+      allMinutes[i] = minutes;
+      if (this.done[car]) finishedTotal += minutes;
       driveTotal += (driveEnd - trip.depart + ACCESS_SECONDS) / 60;
       entryTotal += (this.enteredAt[car] ? this.enteredAt[car] - trip.depart : end - trip.depart) / 60;
       if (trip.depart >= rushStart && trip.depart < rushEnd) {
@@ -720,6 +730,7 @@ export class MetroSim {
       }
     }
     const count = trips.length || 1;
+    allMinutes.sort();
     const hours = this.carTimeOnEdge / 3600;
     const scale = 1 / config.sampleRate;
     return {
@@ -729,6 +740,9 @@ export class MetroSim {
       meanDriveMinutes: driveTotal / count,
       meanEntryWaitMinutes: entryTotal / count,
       rushMeanMinutes: rushCount ? rushTotal / rushCount : 0,
+      medianMinutes: allMinutes[Math.floor(allMinutes.length / 2)] ?? 0,
+      finishedMeanMinutes: this.arrived ? finishedTotal / this.arrived : 0,
+      p90Minutes: allMinutes[Math.floor(allMinutes.length * 0.9)] ?? 0,
       vehicleHours: hours,
       vehicleKm: this.carKm,
       delayHours: this.delaySeconds / 3600,

@@ -44,7 +44,7 @@ const { trips, sampleRate } = sampleTrips(matrix, cars, seed);
 function simulate(edgeWeights?: Float32Array) {
   const config: RunConfig = {
     sampleRate,
-    capacityScale: Number(process.env.CAPACITY ?? 2.5),
+    capacityScale: Number(process.env.CAPACITY ?? 2.6),
     tesShare,
     baseline: 'live-traffic',
     rerouteSeconds: 300,
