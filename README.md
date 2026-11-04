@@ -128,6 +128,8 @@ Open http://127.0.0.1:5173. It sends about one photo per second, which costs rea
 
 The town is plain data and the 3D layer is one file, so this runs in other environments. See [docs/PORTING.md](docs/PORTING.md).
 
+Planned work, including graphics levels from blocks up to open-world quality, is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Built during the hackathon
 
 Everything in this repo was built during the event, between November 3 and 4, 2026. The commit history shows the order. It uses no earlier code.
