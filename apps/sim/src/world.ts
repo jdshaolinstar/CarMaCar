@@ -77,6 +77,8 @@ export interface Car {
   /** Pulling out of a garage. Street traffic gives way. */
   merging: boolean;
   mergedAt: number;
+  /** The route the Traffic Efficiency System recommends, for directions while driving by hand. */
+  tesChain: DirectedEdge[] | null;
   /** Set while a person is driving this car. */
   control: { throttle: number; steer: number } | null;
   spawnedAt: number;
@@ -302,6 +304,7 @@ export class World {
       merging: false,
       mergedAt: -Infinity,
       control: null,
+      tesChain: null,
       spawnedAt: this.time,
       meters: 0,
       metersSinceCapture: 0,
@@ -440,7 +443,7 @@ export class World {
     if (item.onNetwork) this.requestParking(car);
   }
 
-  private requestParking(car: Car) {
+  requestParking(car: Car) {
     if (!this.parking || !this.guidance || !car.destinationId || car.awaitingParking) return;
     car.awaitingParking = true;
     void this.parking.find(car.id, car.destinationId, car.pos, car.excludeStalls).then((stallId) => {
@@ -702,6 +705,25 @@ export class World {
       } else {
         this.requestParking(car);
       }
+    }
+  }
+
+  /** Switches how a car navigates. Going self-routed gives up its reservation and TES route. */
+  setNavMode(car: Car, nav: NavMode) {
+    car.nav = nav;
+    car.tesChain = null;
+    if (nav !== 'self') car.sharesGps = true;
+    if (car.role === 'network' || car.role === 'manual') car.role = nav === 'self' ? 'manual' : 'network';
+    if (car.phase !== 'drive' || car.insideGarage) return;
+    if (nav === 'self') {
+      if (car.mode === 'toStall') {
+        this.leaveFinalApproach(car);
+        car.targetStallId = null;
+        car.mode = 'cruise';
+        this.parking?.release(car.id);
+      }
+    } else if (!car.targetStallId) {
+      this.requestParking(car);
     }
   }
 

@@ -51,7 +51,10 @@ export function navigate(world: World, car: Car): NavStep | null {
   const goalAlong = stall ? graph.alongApproach(stall) : destination!.along;
   const onGoal = goal.from === start.from && goal.to === start.to;
 
-  const chain = onGoal && goalAlong > along ? [start] : graph.route(start, goal);
+  // The Traffic Efficiency System's route when it applies to where the car is now, else the shortest.
+  const tes = car.nav === 'self' ? null : car.tesChain;
+  const tesFits = tes && tes.length > 0 && tes[0].from === start.from && tes[0].to === start.to;
+  const chain = onGoal && goalAlong > along ? [start] : tesFits ? tes : graph.route(start, goal);
   const lastLength = graph.edgeLength(chain[chain.length - 1]);
   const path = graph.buildPath(chain, Math.max(0, Math.min(along, graph.edgeLength(start))), Math.min(goalAlong, lastLength));
 

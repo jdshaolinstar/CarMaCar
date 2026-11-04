@@ -44,6 +44,7 @@
         <button id="place" type="button" aria-pressed="false">Place a car</button>
         <button id="systems-open" type="button" aria-pressed="false">Systems</button>
         <button id="playbooks-open" type="button" aria-pressed="false">Playbooks</button>
+        <button id="results-open" type="button" aria-pressed="false">Results</button>
         <button id="phone-open" type="button" aria-pressed="false">Phone app</button>
       </div>
       <p class="hint" id="place-hint" hidden>Click a stall on this map or in the city. Click a parked car's stall to remove it.</p>
@@ -75,6 +76,13 @@
       </div>
       <p class="selected">Click any car to view it. Viewing: <b id="selected-car">Your car</b></p>
       <div class="drive-row">
+        <label class="check">Navigation
+          <select id="nav-mode">
+            <option value="self">Own route</option>
+            <option value="guided">TES guided</option>
+            <option value="autopilot">TES autopilot</option>
+          </select>
+        </label>
         <button id="drive" type="button" aria-pressed="false">Drive this car</button>
         <p class="hint" id="drive-help" hidden>Arrows or WASD to drive, Space to brake, P to park, 1 to 3 on the blue pad to change level.</p>
       </div>
@@ -109,6 +117,12 @@
         <p class="hint" id="playbook-watch"></p>
       </div>
       <div class="playbook-list" id="playbook-list"></div>
+    </section>
+
+    <section class="panel systems-panel" id="results" aria-label="Results" hidden>
+      <h2>Results</h2>
+      <p class="hint">Simulated. Same city, same drivers, several seeds. Only how cars navigate changes. Hover a bar for detail.</p>
+      <div id="results-list"></div>
     </section>
 
     <aside class="phone" id="phone" aria-label="Driver's phone app" hidden>

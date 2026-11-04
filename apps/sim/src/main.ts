@@ -6,7 +6,8 @@ import { PhoneApp } from './phone';
 import { PlatformClient } from './platform';
 import { CityScene, type CameraView } from './scene';
 import { renderSystems, type SystemDef } from './systems';
-import { World, type Car, CAR_COLORS } from './world';
+import { renderResults } from './results';
+import { World, type Car, type NavMode, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') ?? 11);
@@ -348,6 +349,7 @@ function describeCar(car: Car): string {
 
 function showSelection() {
   const car = world.cars.get(selectedId);
+  if (car) ($('nav-mode') as HTMLSelectElement).value = car.nav;
   $('selected-car').textContent = car ? describeCar(car) : 'That car has left the city. Click another.';
 }
 
@@ -677,6 +679,45 @@ playbooksButton.addEventListener('click', () => {
   if (!panel.hidden) {
     $('systems').hidden = true;
     $('systems-open').setAttribute('aria-pressed', 'false');
+  }
+});
+
+$('nav-mode').addEventListener('change', (e) => {
+  const car = world.cars.get(selectedId);
+  if (!car) return;
+  const mode = (e.target as HTMLSelectElement).value as NavMode;
+  // Autopilot means hands off.
+  if (mode === 'autopilot' && driving) setDriving(false);
+  world.setNavMode(car, mode);
+  showSelection();
+});
+
+// Directions for a driven car follow TES, but nothing stops the driver going their own way.
+let lastRouteAsk = 0;
+function refreshDrivenRoute() {
+  const car = driving ? world.cars.get(selectedId) : null;
+  const stall = car?.targetStallId ? world.stalls.get(car.targetStallId) : null;
+  if (!car || !stall || !platform || !tesOn || car.nav === 'self' || car.insideGarage) return;
+  if (Date.now() - lastRouteAsk < 2500) return;
+  lastRouteAsk = Date.now();
+  void platform.route(car.id, car.edge, world.graph.approachEdge(stall)).then((chain) => {
+    car.tesChain = chain;
+  });
+}
+setInterval(refreshDrivenRoute, 500);
+
+// Results.
+renderResults($('results-list'));
+const resultsButton = $('results-open');
+resultsButton.addEventListener('click', () => {
+  const panel = $('results');
+  panel.hidden = !panel.hidden;
+  resultsButton.setAttribute('aria-pressed', String(!panel.hidden));
+  if (!panel.hidden) {
+    for (const other of ['systems', 'playbooks']) {
+      $(other).hidden = true;
+      $(`${other}-open`).setAttribute('aria-pressed', 'false');
+    }
   }
 });
 

@@ -184,6 +184,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .phone-places button { background: #eaf1fb; color: var(--sign-blue); border: 0; border-radius: 14px; padding: 5px 9px 3px; font-size: 12.5px; }
 .phone-places button:hover { background: #d5e4f8; }
 
+.tools { flex-wrap: wrap; }
+.drive-row { flex-wrap: wrap; }
+figure { margin: 10px 0 14px; }
+figcaption { font-weight: 600; margin-bottom: 6px; }
+.bar-row { display: grid; grid-template-columns: 138px 1fr 52px; align-items: center; gap: 8px; min-height: 28px; font-size: 13.5px; }
+.bar-label { color: var(--muted); line-height: 1.15; }
+.bar-track { display: block; height: 12px; }
+.bar { display: block; height: 100%; background: var(--curb-green); border-radius: 0 4px 4px 0; }
+.bar.baseline { background: var(--unseen); }
+.bar-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
 .drive-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .drive-row .hint { margin: 0; }
 
