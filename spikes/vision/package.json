@@ -1,0 +1,15 @@
+{
+  "name": "spike-vision",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@meta-sam/parser": "^0.0.10",
+    "openai": "^4.104.0",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}

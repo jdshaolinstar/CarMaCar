@@ -1,0 +1,182 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Vision spike</title>
+<style>
+  html, body { margin: 0; background: #111; }
+  canvas { width: 1280px; height: 720px; display: block; }
+</style>
+<canvas id="c" width="1280" height="720"></canvas>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script>
+(async () => {
+  const B = BABYLON;
+  const canvas = document.getElementById('c');
+  const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true });
+  const scene = new B.Scene(engine);
+  scene.clearColor = new B.Color4(0.62, 0.78, 0.93, 1);
+  const mapData = await (await fetch('/map.json')).json();
+  const params = new URLSearchParams(location.search);
+  const tag = params.get('tag');
+  const truth = await (await fetch('/' + (params.get('truth') || 'truth.json'))).json();
+
+  const mat = (hex, spec = 0.05) => {
+    const m = new B.StandardMaterial('m' + hex);
+    m.diffuseColor = B.Color3.FromHexString(hex);
+    m.specularColor = new B.Color3(spec, spec, spec);
+    return m;
+  };
+
+  const hemi = new B.HemisphericLight('h', new B.Vector3(0, 1, 0), scene);
+  hemi.intensity = 0.75;
+  const sun = new B.DirectionalLight('s', new B.Vector3(-0.5, -1, 0.35), scene);
+  sun.position = new B.Vector3(40, 60, -30);
+  sun.intensity = 0.8;
+  const shadows = new B.ShadowGenerator(2048, sun);
+  shadows.useBlurExponentialShadowMap = true;
+
+  const box = (w, h, d, x, y, z, m, cast = true) => {
+    const b = B.MeshBuilder.CreateBox('b', { width: w, height: h, depth: d }, scene);
+    b.position.set(x, y, z);
+    b.material = m;
+    if (cast) shadows.addShadowCaster(b);
+    return b;
+  };
+  const flat = (w, d, x, z, m, y = 0) => {
+    const g = B.MeshBuilder.CreateGround('g', { width: w, height: d }, scene);
+    g.position.set(x, y, z);
+    g.material = m;
+    g.receiveShadows = true;
+    return g;
+  };
+
+  flat(300, 300, 0, 0, mat('#55585c'));          // road
+  flat(300, 3, 0, 10, mat('#b4b2ab'), 0.15);     // north sidewalk
+  flat(300, 3, 0, -10, mat('#b4b2ab'), 0.15);    // south sidewalk
+  flat(300, 0.15, 0, 0, mat('#e6c34a'), 0.01);   // center line
+
+  const line = mat('#f2f2f2');
+  for (const s of mapData.stalls) {
+    flat(0.12, s.z2 - s.z1, s.x1, (s.z1 + s.z2) / 2, line, 0.01);
+    flat(0.12, s.z2 - s.z1, s.x2, (s.z1 + s.z2) / 2, line, 0.01);
+  }
+  flat(72, 0.12, 0, 6.1, line, 0.01);
+
+  const buildingColors = ['#8d6e63', '#90a4ae', '#a1887f', '#78909c', '#bcaaa4', '#607d8b'];
+  for (let i = 0; i < 12; i++) {
+    const w = 16;
+    const h = 10 + ((i * 37) % 16);
+    const x = -88 + i * 16;
+    box(w - 0.5, h, 14, x, h / 2, 19, mat(buildingColors[i % 6]));
+    box(w - 0.5, h, 14, x, h / 2, -19, mat(buildingColors[(i + 3) % 6]));
+    for (let f = 0; f < Math.floor(h / 3.5); f++) {
+      for (let k = 0; k < 4; k++) {
+        box(2, 1.6, 0.1, x - 5.5 + k * 3.7, 3 + f * 3.5, 11.95, mat('#2f3e4e', 0.4), false);
+      }
+    }
+  }
+
+  // Low-poly car. The whole spike asks whether SAM recognises this.
+  const glass = mat('#1f2933', 0.5);
+  const tire = mat('#16181a');
+  const headlight = mat('#fff3c4');
+  const taillight = mat('#b3261e');
+
+  function car(x, z, hex, yaw = 0) {
+    const root = new B.TransformNode('car', scene);
+    const add = (w, h, d, px, py, pz, m) => {
+      const b = box(w, h, d, px, py, pz, m);
+      b.parent = root;
+      return b;
+    };
+    const paint = mat(hex, 0.3);
+    add(4.4, 0.62, 1.8, 0, 0.62, 0, paint);
+    add(2.3, 0.58, 1.62, -0.15, 1.2, 0, glass);
+    add(2.1, 0.08, 1.56, -0.15, 1.52, 0, paint);
+    for (const sx of [-1.4, 1.4]) {
+      for (const sz of [-0.88, 0.88]) {
+        const t = B.MeshBuilder.CreateCylinder('t', { diameter: 0.66, height: 0.24, tessellation: 18 }, scene);
+        t.rotation.x = Math.PI / 2;
+        t.position.set(sx, 0.33, sz);
+        t.material = tire;
+        t.parent = root;
+        shadows.addShadowCaster(t);
+      }
+    }
+    for (const sz of [-0.62, 0.62]) {
+      add(0.05, 0.16, 0.32, 2.2, 0.72, sz, headlight);
+      add(0.05, 0.16, 0.32, -2.2, 0.72, sz, taillight);
+    }
+    root.position.set(x, 0, z);
+    root.rotation.y = yaw;
+    return root;
+  }
+
+  const colors = ['#c62828', '#1565c0', '#eceff1', '#212121', '#2e7d32', '#9e9e9e', '#f9a825', '#6a1b9a'];
+  let n = 0;
+  for (const s of mapData.stalls) {
+    if (!truth[s.id]) continue;
+    const jitterX = (((n * 37) % 10) - 5) * 0.09;
+    const jitterZ = (((n * 13) % 6) - 3) * 0.05;
+    car((s.x1 + s.x2) / 2 + jitterX, (s.z1 + s.z2) / 2 + jitterZ, colors[n % colors.length]);
+    n++;
+  }
+
+  const cam = new B.FreeCamera('cam', new B.Vector3(0, 1.4, 3), scene);
+  cam.fov = 0.9;
+  cam.minZ = 0.1;
+  cam.maxZ = 400;
+  scene.activeCamera = cam;
+
+  async function shoot(id, px, pz, tx, tz) {
+    cam.position.set(px, 1.4, pz);
+    cam.setTarget(new B.Vector3(tx, 1.2, tz));
+    scene.render();
+    await new Promise((r) => setTimeout(r, 300));
+    scene.render();
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const pose = {
+      position: [px, 1.4, pz],
+      target: [tx, 1.2, tz],
+      up: [0, 1, 0],
+      fovY: 0.9,
+      width: 1280,
+      height: 720,
+    };
+    await fetch('/frame', { method: 'POST', body: JSON.stringify({ id, dataUrl, pose }) });
+  }
+
+  await scene.whenReadyAsync();
+
+  // Held-out layout: only a dense dash-camera drive, one frame every 6 m.
+  if (tag) {
+    let f = 0;
+    for (let x = -54; x <= 30; x += 6) {
+      await shoot(`${tag}-${String(f++).padStart(2, '0')}`, x, 2.5, x + 16, 7);
+    }
+    window.__done = true;
+    document.title = 'DONE';
+    document.body.insertAdjacentHTML('beforeend', '<p style="color:#fff">DONE</p>');
+    return;
+  }
+
+  // Forward-right dash camera on a car driving the +z lane.
+  let i = 0;
+  for (const x of [-48, -33, -18, -3, 12, 27]) {
+    await shoot(`front-${String(i++).padStart(2, '0')}`, x, 2.5, x + 16, 7);
+  }
+  // Pure side camera.
+  i = 0;
+  for (const x of [-30, -12, 6, 24]) {
+    await shoot(`side-${String(i++).padStart(2, '0')}`, x, 2.5, x, 12);
+  }
+  await shoot('wide-00', -46, 3, 40, 7);
+
+  window.__done = true;
+  document.title = 'DONE';
+  document.body.insertAdjacentHTML('beforeend', '<p style="color:#fff">DONE</p>');
+})().catch((e) => {
+  document.title = 'ERROR ' + e.message;
+  document.body.insertAdjacentHTML('beforeend', '<p style="color:#fff">ERROR ' + e.message + '</p>');
+  console.error(e);
+});
+</script>

@@ -1,0 +1,28 @@
+# Private notes (contains API keys) - never commit
+.docs-private/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node / build
+node_modules/
+dist/
+.vite/
+*.log
+
+# Python
+__pycache__/
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Spike outputs
+spikes/vision/cache/
+spikes/vision/annotated/
+spikes/vision/frames/
+spikes/vision/result-*.json
