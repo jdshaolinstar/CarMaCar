@@ -1,6 +1,7 @@
 // Wires the simulated city to the platform. Truth stays here; only pixels and pose are sent.
 import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
+import { navigate } from './nav';
 import { PlatformClient } from './platform';
 import { CityScene, type CameraView } from './scene';
 import { World, type Car, CAR_COLORS } from './world';
@@ -207,11 +208,12 @@ function renderEvent(li: HTMLElement, e: AgentEvent) {
 const appliedPlans = new Map<string, string>();
 function applyTrips() {
   for (const plan of twin?.trips ?? []) {
-    if (plan.status !== 'ready' || plan.carId !== hero.id) continue;
+    const car = world.cars.get(plan.carId);
+    if (plan.status !== 'ready' || !car) continue;
     const signature = planSignature(plan);
     if (appliedPlans.get(plan.tripId) === signature) continue;
     appliedPlans.set(plan.tripId, signature);
-    world.applyPlan(hero, plan);
+    world.applyPlan(car, plan);
     highlight = plan.legs[0]?.stallId ?? null;
   }
 }
@@ -307,19 +309,100 @@ lightsToggle.addEventListener('change', () => {
   world.signals.mode = lightsToggle.checked ? 'fixed' : 'off';
 });
 
+// Driving by hand.
+const keys = new Set<string>();
+let driving = false;
+
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  keys.add(e.code);
+  if (!driving) return;
+  if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  if (e.code === 'KeyP') {
+    const car = world.cars.get(selectedId);
+    if (car) world.togglePark(car);
+  }
+});
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
+
+function readControls() {
+  const car = driving ? world.cars.get(selectedId) : null;
+  if (!car?.control) return;
+  const up = keys.has('ArrowUp') || keys.has('KeyW');
+  const down = keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space');
+  const left = keys.has('ArrowLeft') || keys.has('KeyA');
+  const right = keys.has('ArrowRight') || keys.has('KeyD');
+  car.control.throttle = Number(up) - Number(down);
+  car.control.steer = Number(right) - Number(left);
+}
+
+const driveButton = $('drive');
+function setDriving(on: boolean) {
+  const car = world.cars.get(selectedId);
+  if (on) {
+    if (!car || !world.takeControl(car)) {
+      showStatus('Pick a moving car to drive. Parked cars have to pull out first.');
+      return;
+    }
+  } else if (car?.control) {
+    world.releaseControl(car);
+  }
+  driving = on;
+  driveButton.setAttribute('aria-pressed', String(on));
+  driveButton.textContent = on ? 'Stop driving' : 'Drive this car';
+  $('drive-help').hidden = !on;
+  if (on) setView('chase');
+  else {
+    $('nav').hidden = true;
+    scene.setRoute(null);
+    route = null;
+  }
+  driveButton.blur();
+}
+driveButton.addEventListener('click', () => setDriving(!driving));
+
+let route: Vec2[] | null = null;
+let routeKey = '';
+function updateNav() {
+  if (!driving) return;
+  const car = world.cars.get(selectedId);
+  const step = car ? navigate(world, car) : null;
+  $('nav').hidden = !step;
+  if (!step) {
+    route = null;
+    scene.setRoute(null);
+    routeKey = '';
+    return;
+  }
+  const arrows = { straight: '\u2191', left: '\u2190', right: '\u2192', arrive: '\u2691', park: 'P' };
+  $('nav-icon').textContent = arrows[step.icon];
+  $('nav-distance').textContent = step.distance;
+  $('nav-instruction').textContent = step.instruction;
+  route = step.path.points;
+  const key = `${car!.edge.from}${car!.edge.to}${car!.targetStallId}${Math.round(route.length)}`;
+  if (key !== routeKey) {
+    routeKey = key;
+    scene.setRoute(route);
+  }
+}
+setInterval(updateNav, 400);
+
 $('trip').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $('trip-text') as HTMLInputElement;
   const text = input.value.trim();
   if (!text || !platform) return;
   input.value = '';
-  const id = await platform.requestTrip({ carId: hero.id, text, position: hero.pos });
+  const car = world.cars.get(selectedId) ?? hero;
+  const id = await platform.requestTrip({ carId: car.id, text, position: car.pos });
   if (!id) showStatus('The trip agent did not accept that request. Try again.');
 });
 
 scene.start((dt) => {
+  readControls();
   world.tick(dt * timeScale);
-  map.draw(twin, world, highlight, selectedId);
+  map.draw(twin, world, highlight, selectedId, route);
 });
 
 setInterval(() => void takePhoto(), 1000 / framesPerSecond);

@@ -74,7 +74,7 @@ export class LiveMap {
     return best;
   }
 
-  draw(twin: TwinSnapshot | null, world: World, highlight: string | null, selected: string | null) {
+  draw(twin: TwinSnapshot | null, world: World, highlight: string | null, selected: string | null, route: Vec2[] | null) {
     const { ctx, canvas, city } = this;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
@@ -113,6 +113,15 @@ export class LiveMap {
         ctx.stroke();
         ctx.lineWidth = 9;
       }
+    }
+
+    if (route && route.length > 1) {
+      ctx.strokeStyle = '#FF8A1F';
+      ctx.lineWidth = 5;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      route.forEach((p, i) => (i === 0 ? ctx.moveTo(...this.px(p)) : ctx.lineTo(...this.px(p))));
+      ctx.stroke();
     }
 
     ctx.font = '600 19px Overpass, Arial, sans-serif';

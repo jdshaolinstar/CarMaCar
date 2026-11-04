@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateCity } from '@carmacar/shared';
 import { DelayedMapService, runOnce } from './evaluate';
+import { navigate } from './nav';
 import { World } from './world';
 
 const city = generateCity();
@@ -115,6 +116,65 @@ test('a car waits at a red light', () => {
   }
   assert.equal(ranRed, false);
   assert.ok(stoppedAtRed, 'expected the car to meet at least one red light');
+});
+
+test('a driven car moves, and buildings stop it', () => {
+  const world = new World(city, 18, null);
+  const hero = world.addHero();
+  world.takeControl(hero);
+  hero.control!.throttle = 1;
+  run(world, 3);
+  assert.ok(hero.speed > 5, `speed ${hero.speed}`);
+  const before = { ...hero.pos };
+  // Turn hard right and hold the throttle: the car must never end up inside a block.
+  hero.control!.steer = 1;
+  for (let t = 0; t < 30; t += 1 / 20) {
+    world.tick(1 / 20);
+    assert.ok(world.isDrivable(hero.pos), `left the road at ${JSON.stringify(hero.pos)}`);
+  }
+  assert.notDeepEqual(hero.pos, before);
+});
+
+test('a driven car cannot pass through a parked car', () => {
+  const world = new World(city, 19, null);
+  const stall = city.stalls[3];
+  world.parkCarInStall(stall, 0, '#c62828', true);
+  const hero = world.addHero();
+  world.takeControl(hero);
+  const dir = world.graph.edgeDir(world.graph.approachEdge(stall));
+  hero.heading = dir;
+  hero.pos = { x: stall.center.x - dir.x * 12, z: stall.center.z - dir.z * 12 };
+  hero.control!.throttle = 1;
+  for (let t = 0; t < 10; t += 1 / 20) {
+    world.tick(1 / 20);
+    const gap = Math.hypot(hero.pos.x - stall.center.x, hero.pos.z - stall.center.z);
+    assert.ok(gap > 2.5, `overlapped at ${gap.toFixed(2)} m`);
+  }
+});
+
+test('directions name the next turn and the stall', () => {
+  const world = new World(city, 20, null);
+  const hero = world.addHero();
+  const stall = city.stalls.find((s) => s.segmentId === 'H0-2')!;
+  hero.targetStallId = stall.id;
+  const step = navigate(world, hero)!;
+  assert.ok(step, 'expected directions');
+  assert.match(step.instruction, /Turn|Continue/);
+  assert.ok(step.path.length > 50);
+  hero.edge = world.graph.approachEdge(stall);
+  hero.pos = world.graph.lanePoint(hero.edge, world.graph.alongApproach(stall) - 3);
+  assert.equal(navigate(world, hero)!.icon, 'park');
+});
+
+test('parking by hand fills the stall', () => {
+  const world = new World(city, 21, null);
+  const stall = city.stalls[8];
+  const hero = world.addHero();
+  world.takeControl(hero);
+  hero.pos = { x: stall.center.x, z: stall.center.z };
+  assert.equal(world.togglePark(hero), stall.id);
+  assert.equal(world.stallOwner.get(stall.id), hero.id);
+  assert.equal(hero.phase, 'parked');
 });
 
 test('the evaluator counts drivers who never found a space', async () => {

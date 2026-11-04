@@ -4,6 +4,7 @@ import {
   add,
   distance,
   dot,
+  rightOf,
   RoadGraph,
   scale,
   sub,
@@ -51,6 +52,8 @@ export interface Car {
   movement: Movement | null;
   /** The intersection this car is inside. */
   junction: string | null;
+  /** Set while a person is driving this car. */
+  control: { throttle: number; steer: number } | null;
   spawnedAt: number;
   meters: number;
   metersSinceCapture: number;
@@ -96,6 +99,16 @@ const COMFORT_BRAKING = 4;
 const HARD_BRAKING = 8;
 
 const CLAIM_MARGIN = 2;
+
+const MANUAL_ACCELERATION = 5;
+const MANUAL_BRAKING = 10;
+const MANUAL_COASTING = 1.5;
+const MANUAL_TOP_SPEED = 15;
+const MANUAL_REVERSE_SPEED = 5;
+const MANUAL_STEERING = 0.6;
+const WHEELBASE = 2.7;
+const CAR_RADIUS = 1.05;
+const DRIVER_HALF_WIDTH = 1;
 
 const stoppingDistance = (speed: number) => (speed * speed) / (2 * COMFORT_BRAKING);
 
@@ -179,6 +192,7 @@ export class World {
       stopS: Infinity,
       movement: null,
       junction: null,
+      control: null,
       spawnedAt: this.time,
       meters: 0,
       metersSinceCapture: 0,
@@ -507,6 +521,124 @@ export class World {
     car.queue = [];
   }
 
+  /** Hands a moving car to the keyboard. */
+  takeControl(car: Car) {
+    if (car.phase !== 'drive') return false;
+    this.leaveJunction(car);
+    car.control = { throttle: 0, steer: 0 };
+    car.path = null;
+    car.queue = [];
+    car.stopS = Infinity;
+    car.movement = null;
+    car.endsAtStall = false;
+    return true;
+  }
+
+  /** Gives a car back to the simulation. It rejoins the lane of the street it is on. */
+  releaseControl(car: Car) {
+    car.control = null;
+    if (car.phase !== 'drive') return;
+    this.updateEdge(car);
+    const along = dot(sub(car.pos, this.graph.node(car.edge.from)), this.graph.edgeDir(car.edge));
+    const length = this.graph.edgeLength(car.edge);
+    car.startAlong = Math.min(Math.max(along, this.graph.corner), length - this.graph.corner - 1);
+    car.mode = car.targetStallId ? 'toStall' : 'wander';
+    car.queue = [];
+    if (car.targetStallId) this.planQueue(car);
+  }
+
+  /** Parks a driven car in the stall it is sitting in, or pulls out if it is already parked. */
+  togglePark(car: Car): string | null {
+    if (car.phase === 'parked') {
+      car.leaveAt = this.time;
+      return null;
+    }
+    if (car.phase !== 'drive' || Math.abs(car.speed) > 2) return null;
+    let found: Stall | null = null;
+    for (const stall of this.city.stalls) {
+      if (!this.stallOwner.has(stall.id) && distance(stall.center, car.pos) < 4.5) found = stall;
+    }
+    if (!found) return null;
+    this.stallOwner.set(found.id, car.id);
+    car.stallId = found.id;
+    car.targetStallId = found.id;
+    car.phase = 'parked';
+    car.speed = 0;
+    car.pos = found.center;
+    car.heading = this.graph.edgeDir(this.graph.approachEdge(found));
+    car.leaveAt = Infinity;
+    this.parking?.arrived(car.id);
+    return found.id;
+  }
+
+  /** Cars can use roads and sidewalks. Everything else is a building or a block. */
+  isDrivable(point: Vec2): boolean {
+    const reach = this.city.roadHalfWidth + this.city.sidewalkWidth - DRIVER_HALF_WIDTH;
+    for (const seg of this.city.segments) {
+      const rel = sub(point, this.graph.node(seg.a));
+      const along = dot(rel, seg.dir);
+      if (along < -reach || along > seg.length + reach) continue;
+      if (Math.abs(rel.x * seg.dir.z - rel.z * seg.dir.x) <= reach) return true;
+    }
+    return false;
+  }
+
+  /** Each car is two circles, front and rear, which fits a long thin shape better than one. */
+  private hitsCar(car: Car, point: Vec2, heading: Vec2): boolean {
+    const mine = [add(point, scale(heading, 1.4)), add(point, scale(heading, -1.4))];
+    for (const other of this.cars.values()) {
+      if (other === car || distance(other.pos, point) > 8) continue;
+      const theirs = [add(other.pos, scale(other.heading, 1.4)), add(other.pos, scale(other.heading, -1.4))];
+      for (const a of mine) {
+        for (const b of theirs) {
+          if (distance(a, b) < CAR_RADIUS * 2) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** The directed street a car is on, judged by position and which way it faces. */
+  private updateEdge(car: Car) {
+    let best: DirectedEdge | null = null;
+    let bestDistance = Infinity;
+    for (const seg of this.city.segments) {
+      const rel = sub(car.pos, this.graph.node(seg.a));
+      const along = Math.min(Math.max(dot(rel, seg.dir), 0), seg.length);
+      const d = distance(car.pos, add(this.graph.node(seg.a), scale(seg.dir, along)));
+      if (d < bestDistance - 0.01) {
+        bestDistance = d;
+        best = dot(car.heading, seg.dir) >= 0 ? { from: seg.a, to: seg.b } : { from: seg.b, to: seg.a };
+      }
+    }
+    if (best) car.edge = best;
+  }
+
+  private driveByHand(car: Car, dt: number) {
+    const { throttle, steer } = car.control!;
+    if (throttle > 0) car.speed += (car.speed < 0 ? MANUAL_BRAKING : MANUAL_ACCELERATION) * throttle * dt;
+    else if (throttle < 0) car.speed += (car.speed > 0 ? MANUAL_BRAKING : MANUAL_ACCELERATION) * throttle * dt;
+    else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), MANUAL_COASTING * dt);
+    car.speed = Math.min(MANUAL_TOP_SPEED, Math.max(-MANUAL_REVERSE_SPEED, car.speed));
+
+    const yaw = (steer * car.speed * MANUAL_STEERING) / WHEELBASE;
+    const turned = add(car.heading, scale(rightOf(car.heading), yaw * dt));
+    const length = Math.hypot(turned.x, turned.z);
+    const heading = { x: turned.x / length, z: turned.z / length };
+    const next = add(car.pos, scale(heading, car.speed * dt));
+
+    if (!this.isDrivable(next) || this.hitsCar(car, next, heading)) {
+      car.speed *= -0.25; // A small bounce, so the driver can back away.
+      return;
+    }
+    const moved = Math.abs(car.speed) * dt;
+    car.pos = next;
+    car.heading = heading;
+    car.meters += moved;
+    car.metersSinceCapture += moved;
+    this.updateEdge(car);
+  }
+
   /** Distance to the nearest car on the road this car is about to drive, following its path around corners. */
   private gapAhead(car: Car): number {
     const path = car.path;
@@ -600,6 +732,11 @@ export class World {
           car.pos = add(scale(stall.center, 1 - smooth), scale(exit, smooth));
           if (t >= 1) this.finishLeaving(car);
         }
+        continue;
+      }
+
+      if (car.control) {
+        this.driveByHand(car, dt);
         continue;
       }
 

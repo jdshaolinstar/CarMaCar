@@ -122,9 +122,37 @@ h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .selected { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 .selected b { color: var(--line-white); font-weight: 600; }
 
+.drive-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.drive-row .hint { margin: 0; }
+
+/* Directions are a green guide sign, the kind that hangs over a real freeway. */
+.guide {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px;
+  background: #0f6b3c;
+  border-radius: 10px;
+}
+
+.guide-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 22px 8px 14px;
+  min-width: 340px;
+  border: 2px solid var(--line-white);
+  border-radius: 7px;
+}
+
+.guide-icon { font-size: 44px; font-weight: 800; line-height: 1; }
+.guide-distance { font-size: 15px; }
+.guide-text { font-size: 22px; font-weight: 800; line-height: 1.15; }
+
 .log {
   list-style: none;
-  height: 200px;
+  height: 170px;
   overflow-y: auto;
   display: flex;
   flex-direction: column-reverse;

@@ -73,6 +73,7 @@ export class CityScene {
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
   private view: CameraView = 'city';
+  private routeLine: Mesh | null = null;
   private readonly labels: Mesh[] = [];
   private readonly lights: { nodeId: string; dir: Vec2; lamp: Mesh; bar: Mesh }[] = [];
   private lightMaterials!: Record<LightState, StandardMaterial>;
@@ -370,6 +371,22 @@ export class CityScene {
       plate.position.set(pos.x, 26, pos.z);
       this.labels.push(plate);
     }
+  }
+
+  /** The route line drawn on the road for whoever is driving. */
+  setRoute(points: Vec2[] | null) {
+    this.routeLine?.dispose();
+    this.routeLine = null;
+    if (!points || points.length < 2) return;
+    const line = MeshBuilder.CreateLines(
+      'route',
+      { points: points.map((p) => new Vector3(p.x, 0.12, p.z)) },
+      this.scene,
+    );
+    line.color = Color3.FromHexString('#FF8A1F');
+    line.isPickable = false;
+    line.layerMask = LABEL_LAYER;
+    this.routeLine = line;
   }
 
   setLabelsVisible(visible: boolean) {

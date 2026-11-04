@@ -13,6 +13,8 @@ export interface CityNode extends Vec2 {
 export interface Segment {
   id: string;
   label: string;
+  /** Street name, for directions. */
+  street: string;
   a: string;
   b: string;
   /** Unit vector from a to b. */
@@ -65,6 +67,9 @@ export const ROAD_HALF_WIDTH = 6;
 export const SIDEWALK_WIDTH = 2.5;
 export const LANE_OFFSET = 1.8;
 
+const ROW_STREETS = ['Pine St', 'Market St', 'Mission St'];
+const COLUMN_STREETS = ['1st Ave', '2nd Ave', '3rd Ave', '4th Ave'];
+
 const STALL_LENGTH = 6.5;
 const STALL_WIDTH = 2.4;
 const INTERSECTION_MARGIN = 12;
@@ -104,18 +109,18 @@ export function generateCity(): CityMap {
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
   const segments: Segment[] = [];
-  const addSegment = (id: string, a: string, b: string) => {
+  const addSegment = (id: string, a: string, b: string, street: string) => {
     const na = nodeById.get(a)!;
     const nb = nodeById.get(b)!;
     const length = distance(na, nb);
     const label = String.fromCharCode(65 + segments.length);
-    segments.push({ id, label, a, b, length, dir: { x: (nb.x - na.x) / length, z: (nb.z - na.z) / length } });
+    segments.push({ id, label, street, a, b, length, dir: { x: (nb.x - na.x) / length, z: (nb.z - na.z) / length } });
   };
   for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS - 1; c++) addSegment(`H${r}-${c}`, nodeId(c, r), nodeId(c + 1, r));
+    for (let c = 0; c < COLS - 1; c++) addSegment(`H${r}-${c}`, nodeId(c, r), nodeId(c + 1, r), ROW_STREETS[r]);
   }
   for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS - 1; r++) addSegment(`V${c}-${r}`, nodeId(c, r), nodeId(c, r + 1));
+    for (let r = 0; r < ROWS - 1; r++) addSegment(`V${c}-${r}`, nodeId(c, r), nodeId(c, r + 1), COLUMN_STREETS[c]);
   }
 
   // Parking on one side of each street, alternating so both travel directions pass stalls.
