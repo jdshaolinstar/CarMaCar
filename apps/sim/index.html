@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CarMaCar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="city" aria-label="3D view of the simulated city"></canvas>
+
+    <div class="plate" id="plate">
+      <div class="plate-inner">
+        <span class="plate-p" aria-hidden="true">P</span>
+        <div>
+          <h1>CarMaCar</h1>
+          <p>Live parking map, built only from what cameras see</p>
+        </div>
+      </div>
+    </div>
+
+    <section class="panel map-panel" aria-label="Live parking map">
+      <canvas id="map" width="760" height="500"></canvas>
+      <div class="legend">
+        <span><i class="swatch free"></i>Open</span>
+        <span><i class="swatch taken"></i>Taken</span>
+        <span><i class="swatch unseen"></i>Not seen yet</span>
+      </div>
+      <dl class="stats">
+        <div><dt>Open spots</dt><dd id="stat-open">0</dd></div>
+        <div><dt>Stalls seen</dt><dd id="stat-seen">0</dd></div>
+        <div><dt>Map matches reality</dt><dd id="stat-accuracy">No data</dd></div>
+        <div><dt>Photos analyzed</dt><dd id="stat-frames">0</dd></div>
+      </dl>
+      <button id="place" type="button" aria-pressed="false">Place a car</button>
+      <p class="hint" id="place-hint" hidden>Click a stall on this map or in the city. Click a parked car's stall to remove it.</p>
+    </section>
+
+    <section class="panel camera-panel" aria-label="Latest camera photo">
+      <h2>What the camera saw</h2>
+      <div class="frame" id="frame">
+        <img id="frame-img" alt="Latest photo from a car camera" hidden />
+        <svg id="frame-masks" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+        <p class="frame-empty" id="frame-empty">Waiting for the first photo</p>
+      </div>
+      <p class="caption" id="frame-caption">The platform gets this photo and the camera's position, then deletes the photo.</p>
+    </section>
+
+    <section class="panel driver-panel" aria-label="Driver console">
+      <div class="views">
+        <button id="view-city" type="button" aria-pressed="true">City</button>
+        <button id="view-driver" type="button" aria-pressed="false">Driver</button>
+      </div>
+      <ol class="log" id="log" aria-live="polite"></ol>
+      <form id="trip">
+        <label for="trip-text">Tell the orange car where to go</label>
+        <div class="trip-row">
+          <input id="trip-text" maxlength="400" autocomplete="off" value="Drive to the movie theater. Find parking. The movie ends at 3pm" />
+          <button type="submit">Send</button>
+        </div>
+      </form>
+      <p class="hint">Trip requests go to Meta's API and may be used to train its models.</p>
+    </section>
+
+    <p class="status" id="status" role="status" hidden></p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -11,6 +11,8 @@ import {
   type DirectedEdge,
   type Path,
   type Stall,
+  type TripPlan,
+  type TwinSnapshot,
   type Vec2,
 } from '@carmacar/shared';
 
@@ -290,7 +292,6 @@ export class World {
     car.path = this.graph.buildPath([car.edge, next], car.startAlong, this.graph.corner);
     car.s = 0;
     car.endsAtStall = false;
-    car.queue = car.queue;
     this.pendingEdge.set(car.id, next);
   }
 
@@ -326,7 +327,6 @@ export class World {
   }
 
   private startParking(car: Car, stallId: string) {
-    const stall = this.stalls.get(stallId)!;
     this.stallOwner.set(stallId, car.id);
     car.phase = 'parkIn';
     car.parkT = 0;
@@ -380,8 +380,44 @@ export class World {
       car.spawnedAt = this.time;
       this.requestParking(car);
     } else {
-      car.role = car.role === 'hero' ? 'hero' : car.role;
       car.mode = car.role === 'hero' ? 'wander' : 'exit';
+    }
+  }
+
+  /** Reacts to the platform's map: network cars drop stalls cameras say are taken and retry when unassigned. */
+  syncWithTwin(twin: TwinSnapshot) {
+    for (const car of this.cars.values()) {
+      if (car.role !== 'network' || car.phase !== 'drive' || car.endsAtStall) continue;
+      if (car.targetStallId) {
+        const stall = twin.stalls[car.targetStallId];
+        if (stall && stall.reservedBy !== car.id) {
+          car.excludeStalls.push(car.targetStallId);
+          car.targetStallId = null;
+          car.mode = 'cruise';
+          this.requestParking(car);
+        }
+      } else {
+        this.requestParking(car);
+      }
+    }
+  }
+
+  /** Applies a trip plan from the agent to a car. */
+  applyPlan(car: Car, plan: TripPlan) {
+    const [first, ...rest] = plan.legs;
+    if (!first) return;
+    car.tripId = plan.tripId;
+    car.destinationId = first.destinationId;
+    car.nextLegs = rest.map((leg) => ({ destinationId: leg.destinationId, stayMinutes: leg.stayMinutes }));
+    if (car.phase === 'parked') {
+      this.beginLeaving(car);
+      car.nextLegs.unshift({ destinationId: first.destinationId, stayMinutes: first.stayMinutes });
+      return;
+    }
+    if (first.stallId) this.targetStall(car, first.stallId);
+    else {
+      car.mode = 'cruise';
+      this.requestParking(car);
     }
   }
 
