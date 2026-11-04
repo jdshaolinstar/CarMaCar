@@ -41,6 +41,16 @@ button { cursor: pointer; font-weight: 600; }
 .summary div { line-height: 1.2; }
 .summary b { display: block; font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .summary span { color: var(--muted); font-size: 13px; }
+.mode { margin-left: 6px; padding: 1px 8px; border-radius: 4px; background: var(--lane-yellow); color: #1b1f23; font-size: 14px; font-weight: 800; vertical-align: middle; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 2px 16px 8px; list-style: none; font-size: 13px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 4px; border-radius: 2px; background: var(--c); }
+.muse { padding: 10px 16px; background: var(--panel); line-height: 1.35; }
+.muse[hidden] { display: none; }
+.muse h2 { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.muse ul { padding-left: 18px; font-size: 15px; }
+.muse p { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.muse .muse-source { font-size: 12.5px; }
 .note { padding: 0 16px 8px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
 @media (max-width: 760px) {
   .maps { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; min-height: 560px; }

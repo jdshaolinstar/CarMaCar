@@ -882,6 +882,13 @@ const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
   {
+    id: 'los-angeles',
+    title: 'Los Angeles, one morning commute',
+    description: "Leaves the 3D city for a 2D study of TES on Los Angeles's real road network, with commuters modeled from Census data. Simulated traffic, not measurements.",
+    watch: 'Compare the two maps at 8 AM, then change the share of drivers on TES.',
+    run: () => window.location.assign('metro.html'),
+  },
+  {
     id: 'trash-hunt',
     title: 'Trash hunt',
     description: `A ${ROUND_SECONDS / 60} minute round on foot against three rivals. Bigger trash scores more, quick pickups build a streak, and gold is hidden on the sidewalks.`,

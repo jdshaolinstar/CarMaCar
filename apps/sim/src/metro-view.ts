@@ -305,6 +305,21 @@ async function main() {
     );
   }
   showSummary();
+  // The written summary only exists once muse-summary.ts has run, and the page works without it.
+  const museRes = await fetch(`${BASE}la-muse.json`).catch(() => null);
+  if (museRes?.ok && museRes.headers.get('content-type')?.includes('json')) {
+    const muse = (await museRes.json()) as { headline: string; findings: string[]; caution: string };
+    $('muse-headline').textContent = muse.headline;
+    $('muse-caution').textContent = muse.caution;
+    $('muse-findings').replaceChildren(
+      ...muse.findings.map((text) => {
+        const item = document.createElement('li');
+        item.textContent = text;
+        return item;
+      }),
+    );
+    $('muse').hidden = false;
+  }
   select.addEventListener('change', async () => {
     active = options.find((r) => r.id === select.value)!;
     await load(active);

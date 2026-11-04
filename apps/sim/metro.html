@@ -12,7 +12,7 @@
   <body>
     <header class="bar">
       <div class="brand">
-        <h1>Los Angeles, one morning commute</h1>
+        <h1>Los Angeles, one morning commute <span class="mode">Simulation</span></h1>
         <p id="scale">Loading the road network</p>
       </div>
       <p class="clock" id="clock">5:00 AM</p>
@@ -39,6 +39,20 @@
       <label class="check"><input id="parked" type="checkbox" />Parked cars</label>
     </footer>
     <section class="summary" id="summary" aria-label="Result of the whole morning"></section>
+    <ul class="legend" aria-label="What the colors mean">
+      <li><i style="--c: #1fb36b"></i>Light traffic</li>
+      <li><i style="--c: #f2ba0f"></i>Busy</li>
+      <li><i style="--c: #ed5c21"></i>Heavy</li>
+      <li><i style="--c: #db242b"></i>Jammed</li>
+      <li><i style="--c: #4088f2"></i>Parking lot</li>
+      <li><i style="--c: #b873f2"></i>Garage</li>
+    </ul>
+    <section class="muse" id="muse" aria-label="Summary written by Muse Spark" hidden>
+      <h2 id="muse-headline"></h2>
+      <ul id="muse-findings"></ul>
+      <p id="muse-caution"></p>
+      <p class="muse-source">Written by Muse Spark from this study's numbers. A check rejects any number the study did not produce.</p>
+    </section>
     <p class="note" id="note"></p>
     <script type="module" src="/src/metro-view.ts"></script>
   </body>
