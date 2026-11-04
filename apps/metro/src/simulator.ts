@@ -22,6 +22,8 @@ export type RoutingMode = 'free-flow' | 'live-traffic' | 'coordinated';
 
 export interface RunConfig {
   sampleRate: number;
+  /** The one calibration setting: stands in for the small streets the map leaves out. */
+  capacityScale: number;
   /** Share of drivers on TES. The rest use the baseline. */
   tesShare: number;
   /** What everyone not on TES does. Today's apps route on live traffic. */
@@ -60,6 +62,8 @@ export interface RunResult {
   meanMinutes: number;
   /** Time to reach the destination zone, without the search for parking. */
   meanDriveMinutes: number;
+  /** Minutes spent waiting to join the first road. Large values mean the entry points are too few. */
+  meanEntryWaitMinutes: number;
   rushMeanMinutes: number;
   vehicleHours: number;
   vehicleKm: number;
@@ -79,6 +83,8 @@ const MIN_STORAGE = 3;
 /** After this long at the front of a blocked queue, a car squeezes through, as in real gridlock. */
 const STUCK_SECONDS = 120;
 const CRUISE_LIMIT_EDGES = 40;
+/** How many roads outward TES looks for a free space. */
+const SPACE_SEARCH_LIMIT = 400;
 /** A road with this share of its spaces free is one where a driver always finds one. */
 const SPOT_CHANCE_SHARE = 0.2;
 const SPACE_METERS = 7;
@@ -86,6 +92,8 @@ const CURB_SHARE = 0.35;
 /** Fixed start and end of each trip, on small roads the network leaves out. */
 const ACCESS_SECONDS = 180;
 const SIGNAL_SECONDS = 22;
+/** How far one driver's idea of a road's time can differ from another's. */
+const ROUTE_VARIATION = 0.25;
 
 /** A simple speed-based fuel curve: litres per km, worst in stop-and-go and at very high speed. */
 export function fuelPerKm(kph: number) {
@@ -220,6 +228,7 @@ export class MetroSim {
   private readonly departedAt: Float32Array;
   private readonly driveEnd: Float32Array;
   private readonly tripEnd: Float32Array;
+  private readonly enteredAt: Float32Array;
   private readonly cruiseCount: Uint8Array;
   private readonly onTes: Uint8Array;
   private readonly done: Uint8Array;
@@ -232,6 +241,16 @@ export class MetroSim {
   private readonly edgeTimeSum: Float32Array;
   private readonly edgeTimeCount: Int32Array;
   private readonly cost: Float32Array;
+  /** Seconds of delay on each road, for reports. */
+  readonly delayByEdge: Float32Array;
+  private readonly searchStamp: Int32Array;
+  private readonly searchPrevious: Int32Array;
+  private readonly searchQueue = new Int32Array(SPACE_SEARCH_LIMIT * 8);
+  private searchId = 0;
+  private newRoute = false;
+  private noiseRound = 1;
+  private readonly varied: Float32Array;
+  private readonly reserved: Uint8Array;
   private carTimeOnEdge = 0;
   private carKm = 0;
   private delaySeconds = 0;
@@ -258,8 +277,8 @@ export class MetroSim {
     this.curbUsed = new Float32Array(edges);
     const random = (this.random = mulberry(config.seed));
     for (let e = 0; e < edges; e++) {
-      this.capacityPerStep[e] = ((n.edgeCapacity[e] / 3600) * STEP * config.sampleRate);
-      this.storage[e] = Math.max(MIN_STORAGE, Math.round(n.edgeStorage[e] * config.sampleRate));
+      this.capacityPerStep[e] = (n.edgeCapacity[e] / 3600) * STEP * config.sampleRate * config.capacityScale;
+      this.storage[e] = Math.max(MIN_STORAGE, Math.round(n.edgeStorage[e] * config.sampleRate * config.capacityScale));
       this.freeSeconds[e] = n.edgeLength[e] / n.edgeSpeed[e] + (n.edgeSignal[e] ? SIGNAL_SECONDS : 0);
       if (n.edgeClass[e] >= 2) {
         this.curbSpaces[e] = (n.edgeLength[e] / SPACE_METERS) * CURB_SHARE;
@@ -280,6 +299,7 @@ export class MetroSim {
     this.departedAt = new Float32Array(cars);
     this.driveEnd = new Float32Array(cars);
     this.tripEnd = new Float32Array(cars);
+    this.enteredAt = new Float32Array(cars);
     this.cruiseCount = new Uint8Array(cars);
     this.onTes = new Uint8Array(cars);
     this.done = new Uint8Array(cars);
@@ -291,6 +311,11 @@ export class MetroSim {
     this.edgeTimeSum = new Float32Array(edges);
     this.edgeTimeCount = new Int32Array(edges);
     this.cost = new Float32Array(edges);
+    this.delayByEdge = new Float32Array(edges);
+    this.varied = new Float32Array(edges);
+    this.searchStamp = new Int32Array(edges);
+    this.searchPrevious = new Int32Array(edges);
+    this.reserved = new Uint8Array(cars);
     for (let e = 0; e < edges; e++) this.observed[e] = this.freeSeconds[e];
   }
 
@@ -331,7 +356,7 @@ export class MetroSim {
         seconds = observed[e];
       } else if (mode === 'coordinated') {
         // Planned traffic, not only traffic already there, and each car's effect on the cars behind it.
-        const capacity = (n.edgeCapacity[e] * sampleRate * rerouteSeconds) / 3600;
+        const capacity = (n.edgeCapacity[e] * sampleRate * this.config.capacityScale * rerouteSeconds) / 3600;
         const ratio = plannedVolume[e] / Math.max(capacity, 0.01);
         const bpr = 0.15 * ratio * ratio * ratio * ratio;
         seconds = Math.max(observed[e], freeSeconds[e] * (1 + bpr * (1 + 4 * coordination)));
@@ -340,9 +365,16 @@ export class MetroSim {
     }
   }
 
+  /** A quick repeatable value from 0 to 1 for a road and a group of drivers, changing each reroute. */
+  private fastNoise(edge: number, group: number) {
+    let h = Math.imul(edge + 1, 0x9e3779b1) ^ Math.imul(group + 1, 0x85ebca6b) ^ this.noiseRound;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+  }
+
   /** Writes each car's route from its zone's tree, cheapest first. */
   private assign(group: number[], mode: RoutingMode) {
-    const { zones, router, trips, n } = this;
+    const { zones, router, trips, n, varied } = this;
     const byOrigin = new Map<number, number[]>();
     for (const car of group) {
       const list = byOrigin.get(trips[car].originZone);
@@ -355,7 +387,11 @@ export class MetroSim {
     for (let slice = 0; slice < slices; slice++) {
       this.fillCost(mode);
       for (const [origin, cars] of byOrigin) {
-        const { via } = router.tree(zones.connectors[origin], this.cost);
+        // App users get slightly different answers, so they don't all pile onto one route at once.
+        if (mode === 'live-traffic') {
+          for (let e = 0; e < n.edgeCount; e++) varied[e] = this.cost[e] * (1 + ROUTE_VARIATION * this.fastNoise(e, origin));
+        }
+        const { via } = router.tree(zones.connectors[origin], mode === 'live-traffic' ? varied : this.cost);
         for (let k = slice; k < cars.length; k += slices) {
           const car = cars[k];
           const connectors = zones.connectors[trips[car].destinationZone];
@@ -391,6 +427,7 @@ export class MetroSim {
       edgeTimeCount[e] = 0;
     }
     this.plannedVolume.fill(0);
+    this.noiseRound = Math.imul(this.noiseRound + 1, 0x27d4eb2f);
   }
 
   /** Picks the next edge when a car has reached its destination and needs a space. */
@@ -399,6 +436,10 @@ export class MetroSim {
     const { curbSpaces, curbUsed, n, config } = this;
     if (!trip.needsStreetParking) return -1;
     const here = n.edgeTo[edge];
+    if (this.reserved[car]) {
+      this.found++;
+      return -1;
+    }
     // A free space on the road just driven, if the driver finds it.
     const share = 1 / config.sampleRate;
     const free = curbSpaces[edge] - curbUsed[edge];
@@ -416,21 +457,52 @@ export class MetroSim {
     const start = n.outStart[here];
     const options = n.outStart[here + 1] - start;
     if (options === 0) return -1;
-    if (this.onTes[car] && config.tesParking) {
-      // TES knows the map, so the driver turns toward a free space, unless the camera reading was wrong.
-      let best = -1;
-      let bestFree = 0;
-      for (let i = start; i < start + options; i++) {
-        const e = n.outgoing[i];
-        const free = curbSpaces[e] - curbUsed[e];
-        if (free > bestFree) {
-          bestFree = free;
-          best = e;
-        }
-      }
-      if (best >= 0 && this.random() < config.mapAccuracy) return best;
+    if (this.onTes[car] && config.tesParking && this.random() < config.mapAccuracy) {
+      const first = this.routeToSpace(car, here);
+      if (first >= 0) return first;
     }
     return n.outgoing[start + Math.floor(this.random() * options)];
+  }
+
+  /** Searches outward from a junction for the nearest road the live map says has a free space. */
+  private routeToSpace(car: number, start: number) {
+    const { n, curbSpaces, curbUsed, searchPrevious, searchStamp } = this;
+    const stamp = ++this.searchId;
+    const queue = this.searchQueue;
+    let head = 0;
+    let tail = 0;
+    for (let i = n.outStart[start]; i < n.outStart[start + 1]; i++) {
+      const edge = n.outgoing[i];
+      searchStamp[edge] = stamp;
+      searchPrevious[edge] = -1;
+      queue[tail++] = edge;
+    }
+    while (head < tail && head < SPACE_SEARCH_LIMIT) {
+      const edge = queue[head++];
+      if (curbSpaces[edge] - curbUsed[edge] >= 1 / this.config.sampleRate) {
+        const path: number[] = [];
+        for (let e = edge; e >= 0; e = searchPrevious[e]) path.push(e);
+        this.reservePool(path.length);
+        const begin = this.poolUsed;
+        for (let i = path.length - 1; i >= 0; i--) this.pool[this.poolUsed++] = path[i];
+        this.routeAt[car] = begin;
+        this.routeEnd[car] = this.poolUsed;
+        // The space is held for this driver, as a reservation would.
+        curbUsed[edge] += 1 / this.config.sampleRate;
+        this.reserved[car] = 1;
+        this.newRoute = true;
+        return path[path.length - 1];
+      }
+      const node = n.edgeTo[edge];
+      for (let i = n.outStart[node]; i < n.outStart[node + 1] && tail < queue.length; i++) {
+        const next = n.outgoing[i];
+        if (searchStamp[next] === stamp) continue;
+        searchStamp[next] = stamp;
+        searchPrevious[next] = edge;
+        queue[tail++] = next;
+      }
+    }
+    return -1;
   }
 
   private moveCars(now: number) {
@@ -463,6 +535,7 @@ export class MetroSim {
         this.carKm += metres / 1000;
         this.carTimeOnEdge += seconds;
         this.delaySeconds += Math.max(0, seconds - this.freeSeconds[edge]);
+        this.delayByEdge[edge] += Math.max(0, seconds - this.freeSeconds[edge]);
         this.fuel += fuelPerKm(metres / 1000 / (Math.max(seconds, 1) / 3600)) * (metres / 1000);
         if (this.cruiseCount[car] > 0) this.cruisingSeconds += seconds;
         credit[edge] -= 1;
@@ -471,7 +544,10 @@ export class MetroSim {
         if (following < 0) tail[edge] = -1;
         count[edge]--;
         if (target >= 0) {
-          if (at < routeEnd[car]) routeAt[car] = at;
+          if (this.newRoute) {
+            // A route to a parking space was just written, starting at the road this car is joining.
+            this.newRoute = false;
+          } else if (at < routeEnd[car]) routeAt[car] = at;
           else routeEnd[car] = routeAt[car] = at;
           this.enter(car, target, now);
         } else {
@@ -539,6 +615,7 @@ export class MetroSim {
         const first = this.pool[this.routeAt[car]];
         if (this.count[first] >= this.storage[first]) continue;
         this.enter(car, first, now);
+        this.enteredAt[car] = now;
         waiting[w] = -1;
       }
       // Compact the waiting list now and then, keeping only those still waiting.
@@ -562,6 +639,7 @@ export class MetroSim {
     const { trips, config } = this;
     let total = 0;
     let driveTotal = 0;
+    let entryTotal = 0;
     let rushTotal = 0;
     let rushCount = 0;
     const rushStart = 3600;
@@ -574,6 +652,7 @@ export class MetroSim {
       const minutes = (end - trip.depart + ACCESS_SECONDS) / 60;
       total += minutes;
       driveTotal += (driveEnd - trip.depart + ACCESS_SECONDS) / 60;
+      entryTotal += (this.enteredAt[car] ? this.enteredAt[car] - trip.depart : end - trip.depart) / 60;
       if (trip.depart >= rushStart && trip.depart < rushEnd) {
         rushTotal += minutes;
         rushCount++;
@@ -587,6 +666,7 @@ export class MetroSim {
       finished: this.arrived,
       meanMinutes: total / count,
       meanDriveMinutes: driveTotal / count,
+      meanEntryWaitMinutes: entryTotal / count,
       rushMeanMinutes: rushCount ? rushTotal / rushCount : 0,
       vehicleHours: hours,
       vehicleKm: this.carKm,

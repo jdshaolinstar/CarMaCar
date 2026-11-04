@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CarMaCar Los Angeles</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/metro.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <h1>Los Angeles, one morning commute</h1>
+        <p id="scale">Loading the road network</p>
+      </div>
+      <p class="clock" id="clock">5:00 AM</p>
+      <a class="back" href="/">Back to the 3D city</a>
+    </header>
+
+    <main class="maps">
+      <section class="map" aria-label="Traffic with today's navigation apps">
+        <canvas id="left"></canvas>
+        <div class="tag"><h2 id="left-name">Today's apps</h2><dl id="left-stats"></dl></div>
+      </section>
+      <section class="map" aria-label="Traffic with the Traffic Efficiency System">
+        <canvas id="right"></canvas>
+        <div class="tag"><h2 id="right-name">TES</h2><dl id="right-stats"></dl></div>
+      </section>
+    </main>
+
+    <footer class="controls">
+      <button id="play" type="button" aria-pressed="true">Pause</button>
+      <label class="wide">Time <input id="time" type="range" min="0" max="1000" value="0" aria-label="Time of morning" /></label>
+      <label>Speed <input id="speed" type="range" min="1" max="20" value="6" aria-label="Playback speed" /></label>
+      <label>TES drivers <select id="adoption" aria-label="Share of drivers on TES"></select></label>
+      <label class="check"><input id="dots" type="checkbox" checked />Moving cars</label>
+      <label class="check"><input id="parked" type="checkbox" />Parked cars</label>
+    </footer>
+    <section class="summary" id="summary" aria-label="Result of the whole morning"></section>
+    <p class="note" id="note"></p>
+    <script type="module" src="/src/metro-view.ts"></script>
+  </body>
+</html>

@@ -16,6 +16,7 @@ console.log(`trips ${trips.length}, standing for ${Math.round(peopleDriving)} dr
 const t1 = Date.now();
 const sim = new MetroSim(network, grid, trips, {
   sampleRate,
+  capacityScale: Number(process.env.CAPACITY ?? 1),
   tesShare,
   baseline,
   rerouteSeconds: Number(process.argv[5] ?? 300),

@@ -8,7 +8,8 @@ import type { Network } from './network';
 import type { Trip, Zones } from './simulator';
 
 export const ZONE_SIZE_METERS = 2500;
-const CONNECTORS_PER_ZONE = 4;
+/** Where a zone's traffic joins the network. Too few would turn each into a false bottleneck. */
+const CONNECTORS_PER_ZONE = Number(process.env.CONNECTORS ?? 10);
 const MAX_SNAP_CELLS = 4;
 /** Workers who drive themselves on a typical weekday. An assumption, in line with regional surveys. */
 export const DRIVE_SHARE = 0.68;
@@ -17,6 +18,10 @@ export const ATTENDANCE = 0.8;
 /** Morning commuters who need street parking. Most workers use a lot or garage. */
 export const STREET_PARKING_SHARE = 0.25;
 export const SIM_START_HOUR = 5;
+/** Hours after the start, so 2.75 is 7:45 AM. */
+const PEAK_HOUR = 2.75;
+/** Standard deviation of departure time. */
+const SPREAD_HOURS = Number(process.env.SPREAD ?? 1.2);
 
 export interface ZoneGrid extends Zones {
   /** Zone for each grid cell, or -1. */
@@ -191,8 +196,8 @@ function mulberry(seed: number) {
 
 /** Morning departures: a bell around 7:30 AM, spread across about four hours. */
 function departureSeconds(random: () => number) {
-  const peak = (2.5 * 3600);
-  const spread = 0.85 * 3600;
+  const peak = PEAK_HOUR * 3600;
+  const spread = SPREAD_HOURS * 3600;
   const normal = Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
   return Math.max(0, peak + normal * spread);
 }

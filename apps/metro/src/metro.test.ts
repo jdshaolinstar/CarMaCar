@@ -27,7 +27,7 @@ function osm(): OsmFile {
 const zones: Zones = { count: 2, connectors: [Int32Array.of(0), Int32Array.of(0)] };
 
 function config(extra: Partial<RunConfig> = {}): RunConfig {
-  return { sampleRate: 1, tesShare: 0, baseline: 'free-flow', rerouteSeconds: 300, horizonSeconds: 3600, mapAccuracy: 0.97, parkingStart: 0.5, tesParking: true, coordination: 0.5, seed: 1, ...extra };
+  return { sampleRate: 1, capacityScale: 1, tesShare: 0, baseline: 'free-flow', rerouteSeconds: 300, horizonSeconds: 3600, mapAccuracy: 0.97, parkingStart: 0.5, tesParking: true, coordination: 0.5, seed: 1, ...extra };
 }
 
 function setup() {

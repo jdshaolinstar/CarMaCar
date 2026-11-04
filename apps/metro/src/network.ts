@@ -47,6 +47,9 @@ export interface Network {
   outgoing: Int32Array;
   /** Set where the edge ends at a traffic signal. */
   edgeSignal: Uint8Array;
+  /** Index into `names`, so people and models can talk about roads, or -1. */
+  edgeName: Int32Array;
+  names: string[];
   center: { lat: number; lon: number };
 }
 
@@ -194,6 +197,22 @@ export function buildNetwork(osm: OsmFile): Network {
   const storage: number[] = [];
   const roadClass: number[] = [];
   const signal: number[] = [];
+  const nameIds: number[] = [];
+  const names: string[] = [];
+  const nameIndex = new Map<string, number>();
+  const nameOf = (tags: Record<string, string> | undefined, road: RoadClass) => {
+    // Freeways go by their number, surface streets by their name.
+    const ref = tags?.ref?.split(';')[0]?.trim();
+    const label = road === 'freeway' ? (ref ?? tags?.name) : (tags?.name ?? ref);
+    if (!label) return -1;
+    let id = nameIndex.get(label);
+    if (id === undefined) {
+      id = names.length;
+      names.push(label);
+      nameIndex.set(label, id);
+    }
+    return id;
+  };
 
   for (const way of ways) {
     const rule = RULES[way.tags?.highway ?? ''];
@@ -205,6 +224,7 @@ export function buildNetwork(osm: OsmFile): Network {
     const totalLanes = Number.isFinite(taggedLanes) && taggedLanes > 0 ? taggedLanes : rule.lanes * (oneway ? 1 : 2);
     const lanes = Math.max(1, oneway || reverse ? totalLanes : Math.round(totalLanes / 2));
     const limit = parseSpeed(way.tags?.maxspeed) ?? rule.speed;
+    const roadName = nameOf(way.tags, rule.road);
 
     let segmentStart = 0;
     let metres = 0;
@@ -231,6 +251,7 @@ export function buildNetwork(osm: OsmFile): Network {
         storage.push(Math.max(1, Math.floor((metres * lanes) / VEHICLE_SPACE_METERS)));
         roadClass.push(ROAD_CLASSES.indexOf(rule.road));
         signal.push(hasSignal ? 1 : 0);
+        nameIds.push(roadName);
       };
       if (!reverse) add(u, v);
       if (!oneway || reverse) add(v, u);
@@ -263,6 +284,8 @@ export function buildNetwork(osm: OsmFile): Network {
     outStart: new Int32Array(kept + 1),
     outgoing: new Int32Array(edges.length),
     edgeSignal: new Uint8Array(edges.length),
+    edgeName: new Int32Array(edges.length),
+    names,
     center,
   };
   for (let i = 0; i < px.length; i++) {
@@ -279,6 +302,7 @@ export function buildNetwork(osm: OsmFile): Network {
     network.edgeStorage[i] = storage[e];
     network.edgeClass[i] = roadClass[e];
     network.edgeSignal[i] = signal[e];
+    network.edgeName[i] = nameIds[e];
   });
   for (let i = 0; i < edges.length; i++) network.outStart[network.edgeFrom[i] + 1]++;
   for (let n = 0; n < kept; n++) network.outStart[n + 1] += network.outStart[n];
