@@ -130,6 +130,8 @@ export class CityScene {
   private readonly facadeMaterials: StandardMaterial[] = [];
   private readonly nightLights: Mesh[] = [];
   private followedWalker: Walker | null = null;
+  private walkerEyes = false;
+  private personMesh!: (color: string) => Mesh;
   private followedPose: (() => { x: number; y: number; z: number; tx: number; tz: number } | null) | null = null;
   private readonly walkerMeshes = new Map<string, InstancedMesh>();
   private readonly litterMeshes = new Map<string, InstancedMesh>();
@@ -316,9 +318,12 @@ export class CityScene {
       return merged;
     };
     const templates = new Map<string, Mesh>();
+    this.personMesh = (color) => {
+      if (!templates.has(color)) templates.set(color, person(color));
+      return templates.get(color)!;
+    };
     for (const w of this.world.walkers) {
-      if (!templates.has(w.color)) templates.set(w.color, person(w.color));
-      const mesh = templates.get(w.color)!.createInstance(w.id);
+      const mesh = this.personMesh(w.color).createInstance(w.id);
       mesh.isPickable = false;
       this.walkerMeshes.set(w.id, mesh);
     }
@@ -367,8 +372,16 @@ export class CityScene {
       t.material = litterMaterial;
       t.useVertexColors = true;
     }
-    this.litterTemplates = { bag, box, can };
-    for (const t of [bag, box, can]) {
+    const gold = MeshBuilder.CreatePolyhedron('treasure', { type: 1, size: 0.42 }, this.scene);
+    const goldMaterial = new StandardMaterial('treasure', this.scene);
+    goldMaterial.diffuseColor = Color3.FromHexString('#ffc81f');
+    goldMaterial.emissiveColor = Color3.FromHexString('#b37a00');
+    goldMaterial.specularColor = new Color3(0.9, 0.8, 0.4);
+    gold.material = goldMaterial;
+    gold.position.y = 0.6;
+    gold.bakeCurrentTransformIntoVertices();
+    this.litterTemplates = { bag, box, can, treasure: gold };
+    for (const t of [bag, box, can, gold]) {
       t.isVisible = false;
       t.isPickable = false;
     }
@@ -953,8 +966,24 @@ export class CityScene {
     this.scene.activeCamera = view === 'city' ? this.overview : this.chase;
   }
 
+  /** Redraws a pedestrian after their color changes. */
+  recolorWalker(w: Walker) {
+    this.walkerMeshes.get(w.id)?.dispose();
+    const mesh = this.personMesh(w.color).createInstance(w.id);
+    mesh.isPickable = false;
+    this.walkerMeshes.set(w.id, mesh);
+  }
+
+  /** Switches a followed person between seeing through their eyes and from behind them. */
+  setWalkerEyes(on: boolean) {
+    this.walkerEyes = on;
+    const id = this.followedWalker?.id;
+    if (id) this.walkerMeshes.get(id)?.setEnabled(!on);
+  }
+
   /** Follows a person on foot, or stops following. */
   followWalker(walker: Walker | null) {
+    if (!walker) this.setWalkerEyes(false);
     this.followedWalker = walker;
     this.scene.activeCamera = walker ? this.chase : this.followId ? this.chase : this.overview;
   }
@@ -982,8 +1011,15 @@ export class CityScene {
     }
     const w = this.followedWalker;
     if (w) {
-      const eye = add(w.pos, scale(w.heading, -4.4));
       const y = this.city.sidewalkHeight;
+      if (this.walkerEyes) {
+        const eye = add(w.pos, scale(w.heading, 0.2));
+        this.chase.position.set(eye.x, y + 1.65, eye.z);
+        const look = add(w.pos, scale(w.heading, 7));
+        this.chase.setTarget(new Vector3(look.x, y + 0.4, look.z));
+        return;
+      }
+      const eye = add(w.pos, scale(w.heading, -4.4));
       this.chase.position.set(eye.x, y + 2.6, eye.z);
       const look = add(w.pos, scale(w.heading, 8));
       this.chase.setTarget(new Vector3(look.x, y + 1, look.z));

@@ -19,7 +19,8 @@ Open the live demo, then:
 3. Run **Movie theater surge, no TES**, then **Movie theater surge, with TES**, and compare.
 4. Open **Systems** to switch any part off. Each system is marked production or simulation, with what powers it.
 5. Click any car, press **Drive this car**, and use arrows or WASD. Open **Phone app** to see the driver's view.
-6. Run **Stadium exit, with TES** to see the ring highway. SAM counts each ramp from real frames, and the panel compares the run to the same drivers without TES.
+6. Press **Trash hunt** for a three-minute round on foot against three rivals. Arrows or WASD to walk, Shift to run, E to pick up, V for first person.
+7. Run **Stadium exit, with TES** to see the ring highway. SAM counts each ramp from real frames, and the panel compares the run to the same drivers without TES.
 
 ## How it works
 
@@ -134,6 +135,7 @@ With human drivers set to move over 60% earlier, the stadium gain held at 17% an
 | Highway routing | Production logic. Sees only GPS reports and ramp camera counts. |
 | Ramp camera counts | Production in the live demo, on Meta SAM 3.1. Modeled at the measured rate in the offline study. |
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
+| Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |
 
 ## Run it yourself
 

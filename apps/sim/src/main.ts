@@ -9,6 +9,7 @@ import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
 import { HIGHWAY_MODES, HighwayDemo, highwayDemoLayout, type HighwayModeId, type HighwayScenario } from './highway-demo';
 import { HighwayView } from './highway-view';
+import { ROUND_SECONDS, TrashHunt } from './trash-hunt';
 import { World, type Car, type NavMode, type Walker, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
@@ -588,6 +589,14 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: false },
   },
   {
+    id: 'trashHunt',
+    name: 'Trash hunt game',
+    description: 'A timed round on foot against three rivals. Traffic carries on exactly as it would without it.',
+    layer: 'simulation',
+    engine: 'Game rules, no AI',
+    control: { type: 'toggle', value: false },
+  },
+  {
     id: 'highway',
     name: 'Ring highway',
     description: 'A three-lane highway around the town with five interchanges. Its drivers are modeled, not scripted.',
@@ -720,6 +729,10 @@ function applySystem(id: string, value: boolean | number | string) {
   }  else if (id === 'speed') timeScale = value as number;
   else if (id === 'timeOfDay') scene.setTimeOfDay(value as TimeOfDay);
   else if (id === 'highway') setHighway(value as boolean);
+  else if (id === 'trashHunt') {
+    if (value) startHunt();
+    else if (hunt) quitHunt();
+  }
   else if (id === 'highwayTes') highwayDemo().apply({ mode: value as HighwayModeId });
   else if (id === 'highwayLights') highwayDemo().apply({ smartLights: value as boolean });
   else if (id === 'highwayLimit') highwayDemo().apply({ limitMph: Number(value) });
@@ -847,6 +860,13 @@ function openStreets() {
 const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
+  {
+    id: 'trash-hunt',
+    title: 'Trash hunt',
+    description: `A ${ROUND_SECONDS / 60} minute round on foot against three rivals. Bigger trash scores more, quick pickups build a streak, and gold is hidden on the sidewalks.`,
+    watch: 'Rivals head for what cameras report, or what they can see. You can get ahead by spotting what cameras have missed.',
+    run: () => setSystem('trashHunt', true),
+  },
   {
     id: 'highway-off',
     title: 'Highway rush hour, no TES',
@@ -1142,6 +1162,10 @@ window.addEventListener('keydown', (e) => {
   if (walker) {
     if (e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'KeyE') world.pickUpLitter(walker);
+    if (e.code === 'KeyV' && hunt) {
+      huntEyes = !huntEyes;
+      scene.setWalkerEyes(huntEyes);
+    }
     return;
   }
   if (!driving) return;
@@ -1220,6 +1244,7 @@ setInterval(updateNav, 400);
 // On foot, cleaning up.
 let walker: Walker | null = null;
 const walkButton = $('walk');
+const PLAYER_COLOR = '#FF8A1F';
 
 function setWalking(on: boolean) {
   if (on && driving) setDriving(false);
@@ -1244,7 +1269,8 @@ function readWalkKeys() {
   const down = keys.has('ArrowDown') || keys.has('KeyS');
   const left = keys.has('ArrowLeft') || keys.has('KeyA');
   const right = keys.has('ArrowRight') || keys.has('KeyD');
-  walker.input.forward = Number(up) - Number(down) * 0.5;
+  const running = hunt && !hunt.over && (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? RUN_FACTOR : 1;
+  walker.input.forward = (Number(up) - Number(down) * 0.5) * running;
   walker.input.turn = Number(right) - Number(left);
 }
 
@@ -1256,7 +1282,7 @@ function updateWalkGuide() {
   if (pins.length === 0) {
     $('nav-icon').textContent = '\u2691';
     $('nav-distance').textContent = 'All clear';
-    $('nav-instruction').textContent = 'No trash reported nearby';
+    $('nav-instruction').textContent = hunt ? 'No reports yet. Use your eyes.' : 'No trash reported nearby';
     return;
   }
   const from = walker.pos;
@@ -1270,6 +1296,91 @@ function updateWalkGuide() {
   $('nav-instruction').textContent = metres < 3 ? 'Press E to pick it up' : `Trash reported: ${pin.category}`;
 }
 setInterval(updateWalkGuide, 300);
+
+// Trash hunt: a timed round on foot against other pedestrians. Traffic is not affected.
+const RUN_FACTOR = 1.7;
+const BEST_SCORE_KEY = 'carmacar-trash-hunt-best';
+let hunt: TrashHunt | null = null;
+let huntEyes = false;
+let huntRound = 0;
+
+function readBest() {
+  try {
+    return Number(localStorage.getItem(BEST_SCORE_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+function saveBest(score: number) {
+  try {
+    localStorage.setItem(BEST_SCORE_KEY, String(score));
+  } catch {
+    // Private windows can block storage. The game works without a saved best.
+  }
+}
+
+function startHunt() {
+  hunt?.finish();
+  if (highwayOn) setSystem('highway', false);
+  if (!walker) setWalking(true);
+  if (!walker) return;
+  if (walker.color !== PLAYER_COLOR) {
+    walker.color = PLAYER_COLOR;
+    scene.recolorWalker(walker);
+  }
+  hunt = new TrashHunt(world, walker, seed + 1000 + huntRound++);
+  document.body.classList.add('hunting');
+  $('hunt-panel').hidden = false;
+  $('hunt-result').hidden = true;
+  $('hunt-again').hidden = true;
+}
+
+function quitHunt() {
+  hunt?.finish();
+  hunt = null;
+  huntEyes = false;
+  document.body.classList.remove('hunting');
+  $('hunt-panel').hidden = true;
+  setWalking(false);
+  setSystem('trashHunt', false);
+}
+
+function showHunt() {
+  if (!hunt) return;
+  const left = Math.ceil(hunt.timeLeft);
+  $('hunt-clock').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  $('hunt-board').replaceChildren(
+    ...hunt.standings.map((p) => {
+      const row = document.createElement('li');
+      if (p.isYou) row.className = 'you';
+      const name = document.createElement('span');
+      name.textContent = p.name;
+      const score = document.createElement('span');
+      score.textContent = String(p.score);
+      row.append(name, score);
+      return row;
+    }),
+  );
+  const last = hunt.last ? `+${hunt.last.points} ${hunt.last.kind === 'treasure' ? 'gold!' : hunt.last.kind}. ` : '';
+  const combo = hunt.combo > 1 ? `Streak x${hunt.combo}.` : '';
+  $('hunt-combo').textContent = hunt.inReach() ? 'Press E to pick it up' : `${last}${combo}`;
+  const hint = { hot: 'Gold nearby: hot', warm: 'Gold nearby: warm', cold: 'Gold nearby: cold', gone: 'All the gold is gone' };
+  $('hunt-treasure').textContent = hint[hunt.treasureHint()];
+  if (hunt.over && $('hunt-again').hidden) {
+    const you = hunt.players[0].score;
+    const best = readBest();
+    if (you > best) saveBest(you);
+    const place = ['1st', '2nd', '3rd', '4th'][hunt.place - 1];
+    $('hunt-result').textContent = `Time! You came ${place} with ${you} points and ${hunt.picked} items. ${you > best ? 'New best score.' : `Your best is ${best}.`}`;
+    $('hunt-result').hidden = false;
+    $('hunt-again').hidden = false;
+  }
+}
+setInterval(showHunt, 200);
+$('hunt-start').addEventListener('click', () => setSystem('trashHunt', true));
+$('hunt-again').addEventListener('click', startHunt);
+$('hunt-quit').addEventListener('click', quitHunt);
 
 $('operator').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1295,6 +1406,7 @@ scene.start((dt) => {
   readControls();
   readWalkKeys();
   world.tick(dt * timeScale);
+  hunt?.tick(dt);
   if (highwayOn) highway?.tick(dt * timeScale);
   map.draw(twin, world, highlight, selectedId, route);
 });

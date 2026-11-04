@@ -291,3 +291,12 @@ body.highway .camera-panel, body.highway .driver-panel { display: none; }
 .hw-camera { position: relative; aspect-ratio: 16 / 9; margin-top: 8px; background: var(--asphalt-raised); overflow: hidden; }
 .hw-camera img, .hw-camera svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hw-camera rect { fill: none; stroke: var(--lane-yellow); stroke-width: 4; }
+
+.hunt-panel { position: fixed; top: 14px; right: 14px; width: min(320px, calc(100vw - 32px)); z-index: 6; }
+body.hunting .camera-panel, body.hunting .driver-panel { display: none; }
+.hunt-top { display: flex; justify-content: space-between; align-items: baseline; }
+.hunt-clock { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hunt-board { list-style: decimal inside; margin: 4px 0 8px; padding: 0; font-size: 18px; font-variant-numeric: tabular-nums; }
+.hunt-board li { display: flex; justify-content: space-between; padding: 2px 6px; }
+.hunt-board li.you { background: var(--sign-blue); border-radius: 4px; font-weight: 800; }
+.hunt-line { font-size: 15px; font-weight: 600; min-height: 20px; }

@@ -75,6 +75,22 @@
       <div class="tools"><button id="hw-ride" type="button" aria-pressed="false">Ride along</button></div>
     </section>
 
+    <section class="panel hunt-panel" id="hunt-panel" aria-label="Trash hunt" hidden>
+      <div class="hunt-top">
+        <h2>Trash hunt</h2>
+        <p class="hunt-clock" id="hunt-clock">3:00</p>
+      </div>
+      <ol class="hunt-board" id="hunt-board"></ol>
+      <p class="hunt-line" id="hunt-combo"></p>
+      <p class="hunt-line" id="hunt-treasure"></p>
+      <p class="caption" id="hunt-result" hidden></p>
+      <p class="caption">Arrows or WASD to walk, Shift to run, E to pick up, V to switch view. Traffic carries on as normal.</p>
+      <div class="tools">
+        <button id="hunt-again" type="button" hidden>Play again</button>
+        <button id="hunt-quit" type="button">Quit</button>
+      </div>
+    </section>
+
     <section class="panel camera-panel" aria-label="Latest camera photo">
       <h2>What the camera saw</h2>
       <div class="frame" id="frame">
@@ -111,6 +127,7 @@
         </label>
         <button id="drive" type="button" aria-pressed="false">Drive this car</button>
         <button id="walk" type="button" aria-pressed="false">Walk and clean</button>
+        <button id="hunt-start" type="button">Trash hunt</button>
         <p class="hint" id="walk-help" hidden>Arrows or WASD to walk. Press E at trash to pick it up.</p>
         <p class="hint" id="drive-help" hidden>Arrows or WASD to drive, Space to brake, P to park, 1 to 3 on the blue pad to change level.</p>
       </div>

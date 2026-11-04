@@ -110,7 +110,7 @@ export interface Walker {
   input: { forward: number; turn: number } | null;
 }
 
-export type LitterKind = 'bag' | 'box' | 'can';
+export type LitterKind = 'bag' | 'box' | 'can' | 'treasure';
 
 export interface Litter {
   id: string;
@@ -262,6 +262,10 @@ export class World {
   /** Karma earned by people picking up litter. */
   cleanupKarma = 0;
   litterEnabled = true;
+  /** Set during a game round: how far samaritans can spot trash that no camera has reported. */
+  rivalSight = 0;
+  /** Set during a game round, to score each pickup. */
+  onLitterPicked: ((w: Walker, item: Litter) => void) | null = null;
   /** System switch: good samaritans act on trash pins. */
   samaritansEnabled = true;
   /** Garage and level to the car currently crossing that hub. */
@@ -280,6 +284,7 @@ export class World {
   /** System switch: the platform directs network cars to stalls. */
   guidance = true;
   private nextId = 1;
+  private nextPlacedLitter = 1;
   private demand: DemandItem[] = [];
   private readonly rng: () => number;
   private scanTimer = 0;
@@ -440,9 +445,10 @@ export class World {
   }
 
   /** Drops litter somewhere on the sidewalks. Used at the start and by the litterers. */
-  addLitter(pos: Vec2) {
-    const id = `l${this.nextId++}`;
-    this.litter.set(id, { id, kind: this.pick<LitterKind>(['bag', 'bag', 'box', 'can']), pos });
+  addLitter(pos: Vec2, kind?: LitterKind) {
+    // Placed items come from a game, so they use their own numbers and leave the city's sequence alone.
+    const id = kind ? `g${this.nextPlacedLitter++}` : `l${this.nextId++}`;
+    this.litter.set(id, { id, kind: kind ?? this.pick<LitterKind>(['bag', 'bag', 'box', 'can']), pos });
     return id;
   }
 
@@ -468,6 +474,7 @@ export class World {
           this.litter.delete(target.id);
           w.targetLitter = null;
           this.cleanupKarma += KARMA_PER_PICKUP;
+          this.onLitterPicked?.(w, target);
           continue;
         }
         // Walk straight to it: litter on this block's sidewalk is always close to the loop.
@@ -531,6 +538,7 @@ export class World {
       if (distance(item.pos, w.pos) < PLAYER_PICKUP_REACH) {
         this.litter.delete(item.id);
         this.cleanupKarma += KARMA_PER_PICKUP;
+        this.onLitterPicked?.(w, item);
         return KARMA_PER_PICKUP;
       }
     }
@@ -551,6 +559,16 @@ export class World {
           bestPin = item;
           bestDist = d;
           break;
+        }
+      }
+    }
+    if (!bestPin && this.rivalSight > 0) {
+      let nearest = this.rivalSight;
+      for (const item of this.litter.values()) {
+        const d = distance(item.pos, w.pos);
+        if (d < nearest) {
+          nearest = d;
+          bestPin = item;
         }
       }
     }
