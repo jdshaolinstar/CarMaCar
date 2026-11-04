@@ -462,6 +462,14 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: true },
   },
   {
+    id: 'strategist',
+    name: 'Spark Strategist',
+    description: 'Reviews the whole city every 30 seconds and steers routes, lights and parking.',
+    layer: 'production',
+    engine: 'Meta Muse Spark',
+    control: { type: 'toggle', value: false },
+  },
+  {
     id: 'smartLights',
     name: 'Smart traffic lights',
     description: 'Lights favor the direction with the most cars.',
@@ -572,7 +580,10 @@ function applySystem(id: string, value: boolean | number | string) {
     $('map-note').hidden = visionOn;
   } else if (id === 'garageCameras') garageVisionOn = value as boolean;
   else if (id === 'trash') trashScanOn = value as boolean;
-  else if (id === 'parkingVision') {
+  else if (id === 'strategist') {
+    strategistOn = value as boolean;
+    syncTes();
+  } else if (id === 'parkingVision') {
     parkingVision = value as ParkingVision;
     syncTes();
   } else if (id === 'trashVision') {
@@ -653,17 +664,19 @@ const playbooks: Playbook[] = [
     run() {
       setSystem('tes', false);
       setSystem('smartLights', false);
+      setSystem('strategist', false);
       world.addSurge(cinema.id, 70, 60);
     },
   },
   {
     id: 'surge-on',
     title: 'Movie theater surge, with TES',
-    description: 'The same 70 cars, but TES spreads them across streets and garages before they arrive.',
-    watch: 'Cars peel off to different stalls and garages. Compare with the run without TES.',
+    description: 'The same 70 cars, but TES spreads them across streets and garages, with Muse Spark reviewing the city.',
+    watch: 'Cars peel off to different stalls and garages. Read what the strategist decides in the log.',
     run() {
       setSystem('tes', true);
       setSystem('smartLights', true);
+      setSystem('strategist', true);
       setSystem('network', 0.4);
       setSystem('autopilot', 0.4);
       world.addSurge(cinema.id, 70, 60);

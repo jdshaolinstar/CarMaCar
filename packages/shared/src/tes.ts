@@ -24,6 +24,7 @@ const WALKING_SPEED = 1.3;
 const WALK_WEIGHT = 1.5;
 const GARAGE_ENTRY_SECONDS = 15;
 const SECONDS_PER_GARAGE_LEVEL = 6;
+const DEMAND_WINDOW_SECONDS = 120;
 
 const keyOf = (e: DirectedEdge) => `${e.from}>${e.to}`;
 
@@ -44,6 +45,10 @@ export class TrafficEngine {
   private loadAt = -Infinity;
   /** Extra seconds to avoid a street, set by an operator's goals. Street name to seconds. */
   readonly streetPenalties = new Map<string, number>();
+  /** Added cost for a parking area, by garage id or "street". Negative attracts drivers. */
+  readonly parkingBias = new Map<string, number>();
+  private readonly signalHolds = new Map<string, { axis: SignalAxis; until: number }>();
+  private readonly demand = new Map<string, number[]>();
 
   constructor(
     private readonly city: CityMap,
@@ -104,6 +109,87 @@ export class TrafficEngine {
     this.load = load;
   }
 
+  /** Steers routes away from a street. Zero clears it. */
+  avoidStreet(street: string, seconds: number): boolean {
+    if (!this.city.segments.some((s) => s.street === street)) return false;
+    if (seconds <= 0) this.streetPenalties.delete(street);
+    else this.streetPenalties.set(street, seconds);
+    return true;
+  }
+
+  /** Holds a light in one direction for a while. */
+  favorDirection(intersection: string, axis: SignalAxis, seconds: number, now: number): boolean {
+    const node = this.intersections().find((i) => i.name === intersection);
+    if (!node) return false;
+    this.signalHolds.set(node.id, { axis, until: now + seconds });
+    return true;
+  }
+
+  /** Makes a parking area more or less attractive. Negative attracts drivers. */
+  steerParking(place: string, seconds: number): boolean {
+    const key = place === 'Street parking' ? 'street' : this.city.garages.find((g) => g.name === place)?.id;
+    if (!key) return false;
+    if (seconds === 0) this.parkingBias.delete(key);
+    else this.parkingBias.set(key, seconds);
+    return true;
+  }
+
+  /** Remembers where drivers are heading, so a strategist can see a surge forming. */
+  noteDemand(destinationName: string, now: number) {
+    const list = this.demand.get(destinationName) ?? [];
+    list.push(now);
+    this.demand.set(destinationName, list);
+  }
+
+  private intersections() {
+    return this.city.nodes
+      .map((n) => {
+        const streets = this.graph.next(n.id).map((e) => this.graph.segmentBetween(e.from, e.to).street);
+        return { id: n.id, name: [...new Set(streets)].join(' & '), count: streets.length };
+      })
+      .filter((n) => n.count >= 3);
+  }
+
+  /** A compact picture of the city, for a person or a model to reason about. */
+  cityDigest(now: number, available: (stall: Stall) => boolean) {
+    this.refreshLoad(now);
+    const streetNames = [...new Set(this.city.segments.map((s) => s.street))];
+    const streets = streetNames.map((street) => {
+      const blocks = this.city.segments.filter((s) => s.street === street);
+      const worst = Math.max(
+        ...blocks.flatMap((s) => [this.congestion({ from: s.a, to: s.b }, now), this.congestion({ from: s.b, to: s.a }, now)]),
+      );
+      return { street, congestion: +worst.toFixed(1), steering_seconds: this.streetPenalties.get(street) ?? 0 };
+    });
+    const openIn = (test: (s: Stall) => boolean) => this.city.stalls.filter((s) => test(s) && available(s)).length;
+    const parking = [
+      { place: 'Street parking', open: openIn((s) => !s.garageId), steering_seconds: this.parkingBias.get('street') ?? 0 },
+      ...this.city.garages.map((g) => ({
+        place: g.name,
+        open: openIn((s) => s.garageId === g.id),
+        steering_seconds: this.parkingBias.get(g.id) ?? 0,
+      })),
+    ];
+    const intersections = this.intersections()
+      .map((node) => {
+        const waiting = { east_west: 0, north_south: 0 };
+        for (const out of this.graph.next(node.id)) {
+          const incoming = { from: out.to, to: node.id };
+          const stopped = this.load.get(keyOf(incoming))?.stopped ?? 0;
+          const dir = this.graph.edgeDir(incoming);
+          waiting[Math.abs(dir.x) > Math.abs(dir.z) ? 'east_west' : 'north_south'] += stopped;
+        }
+        return { intersection: node.name, ...waiting };
+      })
+      .filter((i) => i.east_west + i.north_south >= 3);
+    const recent = [...this.demand].map(([destination, times]) => {
+      const fresh = times.filter((t) => now - t < DEMAND_WINDOW_SECONDS);
+      this.demand.set(destination, fresh);
+      return { destination, drivers_last_two_minutes: fresh.length };
+    });
+    return { streets, parking, queued_intersections: intersections, demand: recent.filter((d) => d.drivers_last_two_minutes > 0) };
+  }
+
   /** How much longer a street takes than in free-flowing traffic. Ignores operator goals. */
   congestion(edge: DirectedEdge, now: number): number {
     const seg = this.graph.segmentBetween(edge.from, edge.to);
@@ -144,7 +230,8 @@ export class TrafficEngine {
       if (drive === undefined) continue;
       const walk = (distance(stall.center, destination) / WALKING_SPEED) * WALK_WEIGHT;
       const garage = stall.garageId ? GARAGE_ENTRY_SECONDS + (stall.level ?? 0) * SECONDS_PER_GARAGE_LEVEL : 0;
-      const score = drive + walk + garage;
+      const steering = this.parkingBias.get(stall.garageId ?? 'street') ?? 0;
+      const score = drive + walk + garage + steering;
       if (score < bestScore) {
         bestScore = score;
         best = stall;
@@ -158,6 +245,11 @@ export class TrafficEngine {
     this.refreshLoad(now);
     const plan = new Map<string, SignalAxis>();
     for (const nodeId of nodes) {
+      const hold = this.signalHolds.get(nodeId);
+      if (hold && hold.until > now) {
+        plan.set(nodeId, hold.axis);
+        continue;
+      }
       const pressure: Record<SignalAxis, number> = { ew: 0, ns: 0 };
       for (const out of this.graph.next(nodeId)) {
         const incoming = { from: out.to, to: nodeId };

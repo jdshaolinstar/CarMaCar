@@ -23,6 +23,7 @@ import Fastify from 'fastify';
 import OpenAI from 'openai';
 import { runTripAgent } from './agent';
 import { runOperator } from './operator';
+import { runStrategistCycle } from './strategist';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
 import { SparkVision } from './vision/spark';
@@ -36,6 +37,7 @@ const DAILY_BUDGET_USD = Number(process.env.DAILY_BUDGET_USD ?? 15);
 const MAX_INFLIGHT_PER_SESSION = 6;
 const MAX_SESSIONS = 40;
 const SESSION_IDLE_MS = 20 * 60_000;
+const STRATEGIST_SECONDS = 30;
 const SAM_USD_PER_FRAME = 0.0025;
 // Tested on rendered frames: "garbage bag" found real trash with no false alarms. "litter" found nothing.
 const TRASH_CONCEPT = 'garbage bag';
@@ -77,6 +79,30 @@ function getTwin(id: string): Twin | undefined {
   if (twin) twin.lastSeen = Date.now();
   return twin;
 }
+
+// The strategist reviews each city on its own cycle. It stops with the budget.
+setInterval(() => {
+  for (const twin of sessions.values()) {
+    if (!twin.strategist || !twin.tesEnabled || twin.strategistBusy || budgetExhausted()) continue;
+    twin.strategistBusy = true;
+    const exclude: string[] = [];
+    void runStrategistCycle(
+      {
+        client,
+        model: AGENT_MODEL,
+        engine: twin.tes,
+        now: Date.now() / 1000,
+        available: (s) => twin.available(s, exclude),
+        log: (kind, detail, name) => twin.addEvent({ tripId: 'strategist', kind, detail: kind === 'reply' ? `Strategist: ${detail}` : detail, name }),
+        onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN),
+      },
+      twin.strategistSummary,
+    ).then((summary) => {
+      twin.strategistSummary = summary;
+      twin.strategistBusy = false;
+    });
+  }
+}, STRATEGIST_SECONDS * 1000).unref();
 
 setInterval(() => {
   const cutoff = Date.now() - SESSION_IDLE_MS;
@@ -237,6 +263,7 @@ app.post<{ Params: { id: string }; Body: FindParkingRequest }>('/v1/sessions/:id
   const destination = city.destinations.find((d) => d.id === req.body.destinationId);
   if (!destination) return reply.code(400).send({ error: 'Unknown destination' });
   const exclude = req.body.exclude ?? [];
+  twin.tes.noteDemand(destination.name, Date.now() / 1000);
   // With the Traffic Efficiency System on, the choice weighs traffic on the way as well as the walk.
   const chosen =
     twin.tesEnabled && req.body.edge

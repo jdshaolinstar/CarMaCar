@@ -53,6 +53,8 @@ export class Twin {
   trashVision: TrashVision = 'spark';
   strategist = false;
   trashScanBusy = false;
+  strategistBusy = false;
+  strategistSummary: string | null = null;
   trashNote: string | null = null;
   cameraTrafficCounts = 0;
   frameCount = 0;

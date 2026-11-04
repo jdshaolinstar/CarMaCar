@@ -109,6 +109,7 @@ export class TesService implements ParkingService {
     if (!car) return null;
     const destination = this.city.destinations.find((d) => d.id === destinationId)!;
     const held = new Set(this.reservations.values());
+    this.engine.noteDemand(destination.name, world.time);
     const stall = this.engine.chooseStall(
       car.edge,
       destination,
@@ -150,6 +151,8 @@ export interface RunConfig {
   tes?: boolean;
   smartLights?: boolean;
   cameraCoverage?: number;
+  /** Runs on a regular simulated cycle, for testing a strategist. The simulation waits for it. */
+  hook?: { everySeconds: number; run(tes: TesService, world: World): Promise<void> };
 }
 
 export interface RunResult {
@@ -182,11 +185,16 @@ export async function runOnce(city: CityMap, config: RunConfig): Promise<RunResu
     }),
   );
 
+  let nextHook = config.hook?.everySeconds ?? Infinity;
   const dt = 1 / 10;
   const steps = config.horizonSeconds / dt;
   for (let i = 0; i < steps; i++) {
     world.tick(dt);
     tes?.feed();
+    if (tes && config.hook && world.time >= nextHook) {
+      nextHook = world.time + config.hook.everySeconds;
+      await config.hook.run(tes, world);
+    }
     // Lets the async parking replies land, as they would over the network.
     for (let settle = 0; settle < 4; settle++) await Promise.resolve();
   }
