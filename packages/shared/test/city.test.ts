@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { distance, generateCity, highwayLayout, HighwayShape, pinhole, RoadGraph } from '../src/index';
+import { createHash } from 'node:crypto';
+import { buildCity, distance, generateCity, highwayLayout, HighwayShape, pinhole, RoadGraph } from '../src/index';
 
 const city = generateCity();
 const graph = new RoadGraph(city);
@@ -96,3 +97,27 @@ test('ramps end near their junction', () => {
     assert.ok(Math.hypot(s.onRamp[0].x - s.junction.x, s.onRamp[0].z - s.junction.z) < 12);
   }
 });
+
+test('the demo town never changes, so measured results stay valid', () => {
+  const text = JSON.stringify(generateCity());
+  assert.equal(createHash('sha256').update(text).digest('hex').slice(0, 16), 'e69f013430b8cb98');
+});
+
+test('a layout with uneven blocks gives a connected city with stalls on every street', () => {
+  const made = buildCity({
+    xs: [-120, -40, 70],
+    zs: [-90, 35],
+    rowStreets: ['South St', 'North St'],
+    columnStreets: ['West Ave', 'Middle Ave', 'East Ave'],
+    garages: [],
+    destinations: [{ name: 'Test Cinema', kind: 'cinema', segment: 'H0-1', along: 0.5, side: 1 }],
+    buildings: [{ x: 0, z: 0, w: 20, d: 20, h: 90 }],
+  });
+  assert.equal(made.nodes.length, 6);
+  assert.equal(made.segments.length, 7);
+  assert.ok(made.segments.every((seg) => made.stalls.some((stall) => stall.segmentId === seg.id)));
+  assert.equal(made.segments.find((seg) => seg.id === 'H0-0')?.length, 80);
+  assert.equal(made.bounds.maxX, 130);
+  assert.equal(made.buildings?.[0].h, 90);
+});
+

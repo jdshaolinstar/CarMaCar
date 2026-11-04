@@ -581,8 +581,8 @@ export class CityScene {
     const inset = this.city.roadHalfWidth + this.city.sidewalkWidth;
     let n = 0;
 
-    const addBuilding = (x: number, z: number, w: number, d: number) => {
-      const h = 6 + ((n * 37) % 10);
+    const addBuilding = (x: number, z: number, w: number, d: number, height?: number) => {
+      const h = height ?? 6 + ((n * 37) % 10);
       const uvW = w / 4;
       const uvD = d / 4;
       const uvH = h / 4;
@@ -626,10 +626,14 @@ export class CityScene {
 
     const xLines = [xs[0] - SPACING_X, ...xs, xs[xs.length - 1] + SPACING_X];
     const zLines = [zs[0] - SPACING_Z, ...zs, zs[zs.length - 1] + SPACING_Z];
-    for (let i = 0; i < xLines.length - 1; i++) {
-      for (let j = 0; j < zLines.length - 1; j++) {
-        if (!this.garageAt(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1])) {
-          fillBlock(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1]);
+    if (this.city.buildings) {
+      for (const b of this.city.buildings) addBuilding(b.x, b.z, b.w, b.d, b.h);
+    } else {
+      for (let i = 0; i < xLines.length - 1; i++) {
+        for (let j = 0; j < zLines.length - 1; j++) {
+          if (!this.garageAt(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1])) {
+            fillBlock(xLines[i], xLines[i + 1], zLines[j], zLines[j + 1]);
+          }
         }
       }
     }

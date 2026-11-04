@@ -90,6 +90,45 @@ export interface SidewalkRing {
   length: number;
 }
 
+/** A surveyed building, as a box lined up with the street grid. */
+export interface RealBuilding extends Vec2 {
+  w: number;
+  d: number;
+  h: number;
+  name?: string;
+}
+
+/** What makes one city different from another. Everything else in a CityMap is derived from this. */
+export interface CityLayout {
+  /** Street lines running north and south, in metres. Spacing can be irregular, but they must be straight. */
+  xs: number[];
+  /** Street lines running east and west. */
+  zs: number[];
+  rowStreets: string[];
+  columnStreets: string[];
+  garages: GarageSpec[];
+  destinations: DestinationSpec[];
+  /** Real buildings. When left out, the 3D layer fills the blocks with generated ones. */
+  buildings?: RealBuilding[];
+}
+
+export interface GarageSpec {
+  id: string;
+  name: string;
+  segment: string;
+  door: Vec2;
+  inward: Vec2;
+  entryFromEnd: boolean;
+}
+
+export interface DestinationSpec {
+  name: string;
+  kind: DestinationKind;
+  segment: string;
+  along: number;
+  side: 1 | -1;
+}
+
 export interface CityMap {
   nodes: CityNode[];
   segments: Segment[];
@@ -103,6 +142,7 @@ export interface CityMap {
   sidewalkWidth: number;
   laneOffset: number;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  buildings?: RealBuilding[];
 }
 
 export const COLS = 4;
@@ -134,7 +174,7 @@ const CAMERA_SPREAD = 14;
 const CAMERA_SETBACK = 3.2;
 const CAMERA_FOV = 1.25;
 
-const GARAGE_SPECS = [
+const GARAGE_SPECS: GarageSpec[] = [
   { id: 'GA', name: 'Garage A', segment: 'H1-1', door: { x: 0, z: 15 }, inward: { x: 0, z: 1 }, entryFromEnd: true },
   { id: 'GB', name: 'Garage B', segment: 'H0-1', door: { x: 0, z: -87 }, inward: { x: 0, z: -1 }, entryFromEnd: false },
 ];
@@ -154,7 +194,7 @@ export const rightOf = (dir: Vec2): Vec2 => ({ x: dir.z, z: -dir.x });
 
 export const nodeId = (col: number, row: number): string => `n${col}_${row}`;
 
-const DESTINATION_SPECS: { name: string; kind: DestinationKind; segment: string; along: number; side: 1 | -1 }[] = [
+const DESTINATION_SPECS: DestinationSpec[] = [
   { name: 'Galaxy Cinema', kind: 'cinema', segment: 'H1-1', along: 0.5, side: 1 },
   { name: 'Noodle Bar', kind: 'restaurant', segment: 'H0-0', along: 0.5, side: -1 },
   { name: 'Trattoria Luna', kind: 'restaurant', segment: 'H2-2', along: 0.5, side: 1 },
@@ -166,13 +206,29 @@ const DESTINATION_SPECS: { name: string; kind: DestinationKind; segment: string;
   { name: 'Maple Apartments', kind: 'apartments', segment: 'V0-1', along: 0.5, side: -1 },
 ];
 
+/** The demo town. */
 export function generateCity(): CityMap {
-  const nodes: CityNode[] = [];
   const originX = -((COLS - 1) * SPACING_X) / 2;
   const originZ = -((ROWS - 1) * SPACING_Z) / 2;
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      nodes.push({ id: nodeId(c, r), x: originX + c * SPACING_X, z: originZ + r * SPACING_Z });
+  return buildCity({
+    xs: Array.from({ length: COLS }, (_, c) => originX + c * SPACING_X),
+    zs: Array.from({ length: ROWS }, (_, r) => originZ + r * SPACING_Z),
+    rowStreets: ROW_STREETS,
+    columnStreets: COLUMN_STREETS,
+    garages: GARAGE_SPECS,
+    destinations: DESTINATION_SPECS,
+  });
+}
+
+/** Builds a full map from a layout: stalls, garages, destinations and sidewalks all follow from it. */
+export function buildCity(layout: CityLayout): CityMap {
+  const { xs, zs } = layout;
+  const cols = xs.length;
+  const rows = zs.length;
+  const nodes: CityNode[] = [];
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      nodes.push({ id: nodeId(c, r), x: xs[c], z: zs[r] });
     }
   }
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -185,11 +241,11 @@ export function generateCity(): CityMap {
     const label = String.fromCharCode(65 + segments.length);
     segments.push({ id, label, street, a, b, length, dir: { x: (nb.x - na.x) / length, z: (nb.z - na.z) / length } });
   };
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS - 1; c++) addSegment(`H${r}-${c}`, nodeId(c, r), nodeId(c + 1, r), ROW_STREETS[r]);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols - 1; c++) addSegment(`H${r}-${c}`, nodeId(c, r), nodeId(c + 1, r), layout.rowStreets[r]);
   }
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS - 1; r++) addSegment(`V${c}-${r}`, nodeId(c, r), nodeId(c, r + 1), COLUMN_STREETS[c]);
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows - 1; r++) addSegment(`V${c}-${r}`, nodeId(c, r), nodeId(c, r + 1), layout.columnStreets[c]);
   }
 
   // Parking on one side of each street, alternating so both travel directions pass stalls.
@@ -218,7 +274,7 @@ export function generateCity(): CityMap {
   });
 
   const garages: Garage[] = [];
-  for (const spec of GARAGE_SPECS) {
+  for (const spec of layout.garages) {
     const seg = segments.find((s) => s.id === spec.segment)!;
     const aisle = { x: 1, z: 0 };
     const local = (u: number, v: number) => add(add(spec.door, scale(aisle, u)), scale(spec.inward, v));
@@ -286,7 +342,7 @@ export function generateCity(): CityMap {
   }
 
   const segmentById = new Map(segments.map((s) => [s.id, s]));
-  const destinations: Destination[] = DESTINATION_SPECS.map((spec, i) => {
+  const destinations: Destination[] = layout.destinations.map((spec, i) => {
     const seg = segmentById.get(spec.segment)!;
     const a = nodeById.get(seg.a)!;
     const along = seg.length * spec.along;
@@ -306,12 +362,12 @@ export function generateCity(): CityMap {
 
   const sidewalks: SidewalkRing[] = [];
   const inset = ROAD_HALF_WIDTH + SIDEWALK_WIDTH / 2;
-  for (let c = 0; c < COLS - 1; c++) {
-    for (let r = 0; r < ROWS - 1; r++) {
-      const x0 = originX + c * SPACING_X + inset;
-      const x1 = originX + (c + 1) * SPACING_X - inset;
-      const z0 = originZ + r * SPACING_Z + inset;
-      const z1 = originZ + (r + 1) * SPACING_Z - inset;
+  for (let c = 0; c < cols - 1; c++) {
+    for (let r = 0; r < rows - 1; r++) {
+      const x0 = xs[c] + inset;
+      const x1 = xs[c + 1] - inset;
+      const z0 = zs[r] + inset;
+      const z1 = zs[r + 1] - inset;
       const middle = { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
       if (garages.some((g) => distance(g, middle) < 40)) continue;
       sidewalks.push({
@@ -335,11 +391,12 @@ export function generateCity(): CityMap {
     sidewalkWidth: SIDEWALK_WIDTH,
     laneOffset: LANE_OFFSET,
     bounds: {
-      minX: originX - pad,
-      maxX: -originX + pad,
-      minZ: originZ - pad,
-      maxZ: -originZ + pad,
+      minX: xs[0] - pad,
+      maxX: xs[cols - 1] + pad,
+      minZ: zs[0] - pad,
+      maxZ: zs[rows - 1] + pad,
     },
+    buildings: layout.buildings,
   };
 }
 
