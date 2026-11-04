@@ -10,6 +10,8 @@ const MIN_VISIBLE = 0.6;
 // A car's road contact can sit slightly outside the stall lines.
 const STREET_SIDE_SLACK = 1.2;
 const CURB_SIDE_SLACK = 0.6;
+// Spike street frames measured 0.026 to 0.054 bytes per pixel.
+const MIN_JPEG_BYTES_PER_PIXEL = 0.015;
 
 export interface StallObservation {
   stallId: string;
@@ -71,6 +73,11 @@ function contactSpan(car: Located, stall: Stall): number {
     if (inLength && inWidth) along.push(s);
   }
   return along.length > 1 ? (Math.max(...along) - Math.min(...along)) / stall.length : 0;
+}
+
+/** A real street frame is busy. A near-uniform frame is a camera fault, not an empty street. */
+export function isUsableFrame(jpeg: Buffer, width: number, height: number): boolean {
+  return jpeg.length / (width * height) >= MIN_JPEG_BYTES_PER_PIXEL;
 }
 
 export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Stall[]): FrameAnalysis {

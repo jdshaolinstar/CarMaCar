@@ -16,7 +16,7 @@ import OpenAI from 'openai';
 import { runTripAgent } from './agent';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
-import { analyzeFrame } from './vision/stalls';
+import { analyzeFrame, isUsableFrame } from './vision/stalls';
 import type { VisionProvider } from './vision/provider';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -85,6 +85,9 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
   if (busy >= MAX_INFLIGHT_PER_SESSION) return reply.code(429).send({ error: 'Too many frames in flight' });
 
   const { jpeg, pose, scoutId, capturedAt } = req.body;
+  const pixels = Buffer.from(jpeg, 'base64');
+  // Never let a broken camera report a street as empty. That would send drivers to taken stalls.
+  if (!isUsableFrame(pixels, pose.width, pose.height)) return reply.code(422).send({ error: 'Frame looks blank' });
   inflight.set(req.params.id, busy + 1);
   twin.frameCount++;
   addSpend(SAM_USD_PER_FRAME);
@@ -92,7 +95,7 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
   const started = Date.now();
   try {
     // The frame lives only in this buffer and is gone when the request ends. It is never stored.
-    const masks = await vision.findVehicles(Buffer.from(jpeg, 'base64'));
+    const masks = await vision.findVehicles(pixels);
     const { observations, assignments } = analyzeFrame(masks, pose, city.stalls);
     const changes = twin.observe(observations, Date.now());
     twin.addFrame({

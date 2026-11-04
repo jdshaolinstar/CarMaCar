@@ -3,7 +3,6 @@ import {
   ArcRotateCamera,
   Color3,
   Color4,
-  CreateScreenshotUsingRenderTargetAsync,
   DirectionalLight,
   DynamicTexture,
   Engine,
@@ -12,6 +11,7 @@ import {
   InstancedMesh,
   Mesh,
   MeshBuilder,
+  RenderTargetTexture,
   Scene,
   ShadowGenerator,
   StandardMaterial,
@@ -67,6 +67,9 @@ export class CityScene {
   private readonly stallMarkers = new Map<string, Mesh>();
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
+  private readonly frameTarget: RenderTargetTexture;
+  private readonly encodeContext: CanvasRenderingContext2D;
+  private captureChain: Promise<unknown> = Promise.resolve();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -107,6 +110,17 @@ export class CityScene {
     this.capture.layerMask = WORLD_LAYER;
 
     this.scene.activeCamera = this.overview;
+
+    this.frameTarget = new RenderTargetTexture('frame', { width: FRAME_WIDTH, height: FRAME_HEIGHT }, this.scene, false, true);
+    this.frameTarget.activeCamera = this.capture;
+    this.frameTarget.samples = 4;
+    this.frameTarget.clearColor = new Color4(0.62, 0.78, 0.93, 1);
+    this.frameTarget.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+    this.scene.customRenderTargets.push(this.frameTarget);
+    const encoder = document.createElement('canvas');
+    encoder.width = FRAME_WIDTH;
+    encoder.height = FRAME_HEIGHT;
+    this.encodeContext = encoder.getContext('2d')!;
 
     this.stallMaterials = {
       free: this.overlayMaterial('free'),
@@ -426,18 +440,43 @@ export class CityScene {
   }
 
   /** Renders a real frame from the camera. Returns a JPEG data URL. */
-  async captureFrame(pose: CameraPose): Promise<string> {
-    this.capture.position.set(...pose.position);
-    this.capture.setTarget(new Vector3(...pose.target));
-    this.capture.getViewMatrix(true);
-    return CreateScreenshotUsingRenderTargetAsync(
-      this.engine,
-      this.capture,
-      { width: FRAME_WIDTH, height: FRAME_HEIGHT },
-      'image/jpeg',
-      4,
-      true,
-    );
+  captureFrame(pose: CameraPose): Promise<string> {
+    const run = this.captureChain.then(() => this.renderFrame(pose));
+    this.captureChain = run.catch(() => undefined);
+    return run;
+  }
+
+  // Uses its own offscreen target. Babylon's screenshot helper resizes the main canvas,
+  // which collides with the render loop and leaves ghost trails on screen.
+  private renderFrame(pose: CameraPose): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.capture.position.set(...pose.position);
+      this.capture.setTarget(new Vector3(...pose.target));
+      this.capture.getViewMatrix(true);
+      // Rebuilt each time so cars that spawned since the last frame are included.
+      this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER);
+      this.frameTarget.resetRefreshCounter();
+      this.scene.onAfterRenderObservable.addOnce(async () => {
+        try {
+          const pixels = (await this.frameTarget.readPixels(0, 0, null, true)) as Uint8Array;
+          resolve(this.encodeJpeg(pixels));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  }
+
+  private encodeJpeg(pixels: Uint8Array): string {
+    const row = FRAME_WIDTH * 4;
+    const image = this.encodeContext.createImageData(FRAME_WIDTH, FRAME_HEIGHT);
+    // Render targets read bottom-up.
+    for (let y = 0; y < FRAME_HEIGHT; y++) {
+      const from = (FRAME_HEIGHT - 1 - y) * row;
+      image.data.set(pixels.subarray(from, from + row), y * row);
+    }
+    this.encodeContext.putImageData(image, 0, 0);
+    return this.encodeContext.canvas.toDataURL('image/jpeg', 0.85);
   }
 
   start(onFrame: (dt: number) => void) {
