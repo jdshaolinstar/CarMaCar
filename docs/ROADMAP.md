@@ -60,6 +60,17 @@ Next:
 - More compute: larger cities and more candidates per round should find more, and that is untested until someone runs it.
 - Real isolation: production would run generated code in a locked-down container, not only an allowlist.
 
+## Event modes for Los Angeles
+
+A real city asks TES to handle a concert, not to optimize every trip equally, and random citywide commutes are the hardest
+case for showing a gain. So:
+
+- 1 to 5 events at real venues, each with a class of drivers of a chosen size, heading to one place for one start time.
+- Report three numbers every time: the event class, everyone else, and the whole city. A class that gains at everyone else's expense must show that cost.
+- Two separate experiments: coordination, which spreads event traffic and may help everyone, then priority, which favors a class.
+- Let the Lab write an algorithm for tonight's event.
+- The page switches between finished runs, as the Los Angeles study does.
+
 ## Making the Los Angeles test more realistic
 
 The current study is a calm version of a city. These tests would show how far its results carry:
