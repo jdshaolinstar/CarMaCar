@@ -53,12 +53,12 @@ for (const scenario of SCENARIOS) {
       for (const seed of SEEDS) {
         const config: HighwayConfig = {
           speedLimit: mph * MPH,
-          demand: makeHighwayDemand(layout, seed, scenario.perHour, SPAN, scenario.zones),
+          demand: makeHighwayDemand(layout, seed, scenario.perHour, SPAN, scenario.zones, Number(process.env.EARLIER ?? 1)),
           mix: mode.mix,
           tes: mode.tes,
           horizonSeconds: HORIZON,
           crossRate: Number(process.env.CROSS ?? 0.2),
-          cameraRecall: 0.97,
+          cameraRecall: Number(process.env.RECALL ?? 0.93),
           seed,
         };
         runs.push(new HighwaySim(layout, config).run());
@@ -88,4 +88,4 @@ for (const scenario of SCENARIOS) {
     }
   }
 }
-if (!only && !process.env.LEVERS) writeFileSync(new URL('./highway-results.json', import.meta.url), JSON.stringify(output, null, 2));
+if (!only && !process.env.LEVERS && !process.env.EARLIER && !process.env.LIMITS) writeFileSync(new URL('./highway-results.json', import.meta.url), JSON.stringify(output, null, 2));

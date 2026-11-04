@@ -288,3 +288,6 @@ body.highway .camera-panel, body.highway .driver-panel { display: none; }
 .highway-panel td { text-align: right; font-size: 20px; font-weight: 800; padding: 1px 0 1px 8px; }
 .highway-panel td + td { color: var(--muted); font-weight: 600; }
 .highway-panel .tools { margin-top: 6px; }
+.hw-camera { position: relative; aspect-ratio: 16 / 9; margin-top: 8px; background: var(--asphalt-raised); overflow: hidden; }
+.hw-camera img, .hw-camera svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hw-camera rect { fill: none; stroke: var(--lane-yellow); stroke-width: 4; }

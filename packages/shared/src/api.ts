@@ -13,6 +13,23 @@ export interface FrameUpload {
   capturedAt: number;
 }
 
+/** A ramp camera's frame. Pixels, pose, and the surveyed outline of the ramp. Nothing about what is on it. */
+export interface RampFrameUpload {
+  exit: number;
+  jpeg: string;
+  pose: CameraPose;
+  region: [number, number][];
+}
+
+export interface RampCount {
+  exit: number;
+  count: number;
+  /** Boxes of the cars counted, in image pixels. */
+  boxes: [number, number, number, number][];
+  latencyMs: number;
+  model: string;
+}
+
 export type StallState = 'occupied' | 'free' | 'unknown';
 
 export interface TwinStall {

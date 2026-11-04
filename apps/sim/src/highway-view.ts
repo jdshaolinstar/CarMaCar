@@ -15,12 +15,17 @@ import {
   alongPolyline,
   DECK_HEIGHT,
   HighwayShape,
+  insidePolygon,
   LANE_WIDTH,
+  offRampHeight,
+  onRampHeight,
+  pinhole,
   polylineLength,
   surfaceSeconds,
   type CityMap,
   type HighwayLayout,
   type InterchangeShape,
+  type RampView,
   type RoadPoint,
 } from '@carmacar/shared';
 import type { HighwayCar, HighwaySim } from './highway';
@@ -40,11 +45,6 @@ export const TES_CAR_COLOR = '#19B5FF';
 const CAR_COLORS = ['#c62828', '#eceff1', '#212121', '#2e7d32', '#9e9e9e', '#f9a825', '#6a1b9a', '#37474f', '#ad1457'];
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
-const GROUND_ROAD = 0.18;
-/** Ramps stay level until they clear the deck, then slope to the ground. */
-const LEVEL_SHARE = 0.28;
-const offRampHeight = (f: number) => GROUND_ROAD + (DECK_HEIGHT - GROUND_ROAD) * (1 - smooth(Math.min(1, Math.max(0, (f - LEVEL_SHARE) / (0.97 - LEVEL_SHARE)))));
-const onRampHeight = (f: number) => offRampHeight(1 - f);
 
 export interface HighwayCarPose {
   x: number;
@@ -448,6 +448,17 @@ export class HighwayView {
       return { x: shape.junction.x + (dx / length) * gone, y: 0.16, z: shape.junction.z + (dz / length) * gone, tx: dx / length, tz: dz / length };
     }
     return null;
+  }
+
+  /** Cars drawn inside a ramp camera's outline right now. Truth, for scoring in the browser only. */
+  carsInView(view: RampView) {
+    const camera = pinhole(view.pose);
+    let count = 0;
+    for (const pose of this.poses.values()) {
+      const seen = camera.project([pose.x, pose.y, pose.z]);
+      if (seen && insidePolygon(seen[0], seen[1], view.region)) count++;
+    }
+    return count;
   }
 
   /** Where a car is drawn right now, so a camera can follow it. */

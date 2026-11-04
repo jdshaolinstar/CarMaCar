@@ -1,6 +1,6 @@
 // Turns vehicle masks into per-stall observations using geometry alone.
 // This is the deterministic layer: same masks and pose, same answer, every time.
-import { dot, pinhole, sub, type CameraPose, type PinholeCamera, type Stall, type StallState, type Vec2 } from '@carmacar/shared';
+import { dot, pinhole, sub, type CameraPose, type PinholeCamera, type Stall, type StallState, type Vec2, insidePolygon } from '@carmacar/shared';
 import type { VehicleMask } from './provider';
 
 export const MAX_RANGE = 26;
@@ -123,6 +123,11 @@ function isOnRoad(point: Vec2, seg: RoadSegment) {
 }
 
 /** A real street frame is busy. A near-uniform frame is a camera fault, not an empty street. */
+/** Counts vehicles whose lowest point, where they meet the road, lies inside a region of the image. */
+export function inRegion(masks: VehicleMask[], region: [number, number][]) {
+  return masks.filter((m) => insidePolygon((m.box[0] + m.box[2]) / 2, m.box[3], region));
+}
+
 export function isUsableFrame(jpeg: Buffer, width: number, height: number): boolean {
   return jpeg.length / (width * height) >= MIN_JPEG_BYTES_PER_PIXEL;
 }

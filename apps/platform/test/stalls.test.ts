@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { pinhole, type CameraPose, type Stall } from '@carmacar/shared';
 import { Twin } from '../src/twin';
 import { generateCity } from '@carmacar/shared';
-import { analyzeFrame, lowerHull } from '../src/vision/stalls';
+import { analyzeFrame, inRegion, lowerHull } from '../src/vision/stalls';
 import type { VehicleMask } from '../src/vision/provider';
 
 const stall = (id: string, cx: number): Stall => ({
@@ -121,4 +121,12 @@ test('reservations stop two cars getting the same stall', () => {
   const second = twin.findParking(d)!;
   assert.notEqual(second.stall.id, first.stall.id);
   assert.equal(twin.reserve(first.stall.id, 'car2'), false);
+});
+
+test('only cars that touch the road inside the ramp outline are counted', () => {
+  const mask = (box: [number, number, number, number]): VehicleMask => ({ objectId: 'x', box, raster: new Uint8Array(1), width: 1, height: 1, svgPath: '' });
+  const ramp: [number, number][] = [[100, 100], [300, 100], [300, 300], [100, 300]];
+  const onRamp = mask([150, 120, 250, 200]);
+  const roofOverRamp = mask([150, 20, 250, 90]);
+  assert.deepEqual(inRegion([onRamp, roofOverRamp], ramp), [onRamp]);
 });

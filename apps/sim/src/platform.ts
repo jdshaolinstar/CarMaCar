@@ -3,6 +3,8 @@ import type {
   DirectedEdge,
   FindParkingResponse,
   FrameUpload,
+  RampCount,
+  RampFrameUpload,
   ResidentReply,
   ResidentRequest,
   RouteReply,
@@ -44,6 +46,11 @@ export class PlatformClient implements ParkingService {
   async sendFrame(frame: FrameUpload): Promise<boolean> {
     const res = await fetch(this.url('/frames'), json(frame));
     return res.ok;
+  }
+
+  async sendRampFrame(frame: RampFrameUpload): Promise<RampCount | null> {
+    const res = await fetch(this.url('/ramp-frames'), json(frame));
+    return res.ok ? res.json() : null;
   }
 
   async twin(): Promise<TwinSnapshot | null> {

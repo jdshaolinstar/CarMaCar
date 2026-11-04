@@ -29,7 +29,8 @@ const WARM_UP_SECONDS = 420;
 const STEP = 0.25;
 const RECENT_TRIPS_SECONDS = 240;
 const CROSS_RATE = 0.2;
-const CAMERA_RECALL = 0.97;
+// Measured: SAM counted 93% of cars on 74 rendered ramp frames.
+const CAMERA_RECALL = 0.93;
 
 export interface HighwaySettings {
   mode: HighwayModeId;

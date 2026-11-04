@@ -1,5 +1,6 @@
 // The ring highway, and the TES logic that manages it. This file is product code: the controller
 // only ever sees what connected cars report and what ramp cameras count, never the simulator's truth.
+import { pinhole, type CameraPose } from './camera';
 
 export const MPH = 0.44704;
 
@@ -274,6 +275,58 @@ export interface RoadPoint {
 
 export const LANE_WIDTH = 3.7;
 export const DECK_HEIGHT = 7;
+export const GROUND_ROAD = 0.18;
+const LEVEL_SHARE = 0.28;
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/** Height of an off-ramp, from 0 at the mainline to 1 at the stop line. Level until it clears the deck. */
+export function offRampHeight(f: number) {
+  return GROUND_ROAD + (DECK_HEIGHT - GROUND_ROAD) * (1 - smoothstep(Math.min(1, Math.max(0, (f - LEVEL_SHARE) / (0.97 - LEVEL_SHARE)))));
+}
+export const onRampHeight = (f: number) => offRampHeight(1 - f);
+
+const RAMP_CAMERA_HEIGHT = 15;
+const RAMP_CAMERA_FOV = 0.85;
+const RAMP_CAMERA_SETBACK = 26;
+const RAMP_REGION_HALF_WIDTH = 3.8;
+
+export interface RampView {
+  pose: CameraPose;
+  /** The ramp's outline in the image. Only cars inside it count. */
+  region: [number, number][];
+}
+
+/** A pole camera at the bottom of an off-ramp, looking back up it. */
+export function rampCameraView(offRamp: RoadPoint[], width: number, height: number): RampView {
+  const end = offRamp[offRamp.length - 1];
+  const side = { x: end.tz, z: -end.tx };
+  const lookAt = offRamp[Math.round(offRamp.length * 0.72)];
+  const pose: CameraPose = {
+    position: [end.x + end.tx * RAMP_CAMERA_SETBACK + side.x * 7, RAMP_CAMERA_HEIGHT, end.z + end.tz * RAMP_CAMERA_SETBACK + side.z * 7],
+    target: [lookAt.x, offRampHeight(0.72), lookAt.z],
+    fovY: RAMP_CAMERA_FOV,
+    width,
+    height,
+  };
+  const camera = pinhole(pose);
+  const edge = (sign: number) =>
+    offRamp.map((p, i) => {
+      const s = { x: p.tz, z: -p.tx };
+      return camera.project([p.x + s.x * sign * RAMP_REGION_HALF_WIDTH, offRampHeight(i / (offRamp.length - 1)), p.z + s.z * sign * RAMP_REGION_HALF_WIDTH]);
+    });
+  const outline = [...edge(-1), ...edge(1).reverse()].filter((p): p is [number, number] => p !== null);
+  return { pose, region: outline };
+}
+
+export function insidePolygon(x: number, y: number, polygon: [number, number][]) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 const CORNER_RADIUS = 90;
 const HALF_WIDTH = 330;
 const RAMP_REACH = 95;

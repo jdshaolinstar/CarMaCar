@@ -12,6 +12,8 @@ import {
   type FindParkingResponse,
   type FrameUpload,
   type OperatorRequest,
+  type RampCount,
+  type RampFrameUpload,
   type ResidentReply,
   type ResidentRequest,
   type RouteReply,
@@ -32,7 +34,7 @@ import { runStrategistCycle } from './strategist';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
 import { SparkVision } from './vision/spark';
-import { analyzeFrame, isUsableFrame, locateTrash, trashSpotInView } from './vision/stalls';
+import { analyzeFrame, inRegion, isUsableFrame, locateTrash, trashSpotInView } from './vision/stalls';
 import type { VehicleMask, VisionProvider } from './vision/provider';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -138,6 +140,37 @@ app.post('/v1/sessions', async (_req, reply) => {
   const id = randomUUID();
   sessions.set(id, new Twin(city));
   return { sessionId: id };
+});
+
+// A ramp camera. Counts cars on the ramp from pixels alone, with the same limits as any other frame.
+app.post<{ Params: { id: string }; Body: RampFrameUpload }>('/v1/sessions/:id/ramp-frames', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  if (twin.frameCount >= FRAME_LIMIT) return reply.code(429).send({ error: 'Session frame limit reached' });
+  const busy = inflight.get(req.params.id) ?? 0;
+  if (busy >= MAX_INFLIGHT_PER_SESSION) return reply.code(429).send({ error: 'Too many frames in flight' });
+  const { exit, jpeg, pose, region } = req.body;
+  const pixels = Buffer.from(jpeg, 'base64');
+  if (!isUsableFrame(pixels, pose.width, pose.height)) return reply.code(422).send({ error: 'Frame looks blank' });
+  inflight.set(req.params.id, busy + 1);
+  twin.frameCount++;
+  addSpend(SAM_USD_PER_FRAME);
+  const started = Date.now();
+  try {
+    const counted = inRegion(await vision.findVehicles(pixels), region);
+    return {
+      exit,
+      count: counted.length,
+      boxes: counted.map((m) => m.box),
+      latencyMs: Date.now() - started,
+      model: vision.model,
+    } satisfies RampCount;
+  } catch {
+    return reply.code(502).send({ error: 'Vision failed' });
+  } finally {
+    inflight.set(req.params.id, (inflight.get(req.params.id) ?? 1) - 1);
+  }
 });
 
 app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames', async (req, reply) => {

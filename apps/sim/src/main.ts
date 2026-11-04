@@ -1,5 +1,5 @@
 // Wires the simulated city to the platform. Truth stays here; only pixels and pose are sent.
-import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type CityMap, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
+import { distance, dot, generateCity, rampCameraView, rightOf, scale, type AgentEvent, type CameraPose, type CityMap, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { navigate } from './nav';
 import { PhoneApp } from './phone';
@@ -784,6 +784,39 @@ function showHighway() {
 }
 setInterval(showHighway, 500);
 
+// Ramp cameras. One real frame at a time, in turn, read by SAM. Truth is copied when the frame is
+// rendered and stays in the browser, for the score only.
+const RAMP_FRAME_MS = 2500;
+const rampReadings: { exit: number; count: number; truth: number; ms: number }[] = [];
+let nextRamp = 0;
+
+async function readRamp() {
+  if (!highwayOn || !highway || !highwayView || !platform || !visionOn) return;
+  const { tes } = HIGHWAY_MODES[highway.settings.mode];
+  if (!tes?.cameras) return;
+  const exit = nextRamp;
+  nextRamp = (nextRamp + 1) % highwayView.layout.interchanges.length;
+  const view = rampCameraView(highwayView.interchanges[exit].offRamp, 1280, 720);
+  let truth = 0;
+  const { dataUrl } = await scene.captureFrame(
+    () => view.pose,
+    () => (truth = highwayView!.carsInView(view)),
+  );
+  const reply = await platform.sendRampFrame({ exit, jpeg: dataUrl.split(',')[1], pose: view.pose, region: view.region }).catch(() => null);
+  if (!reply) return;
+  highway.sim.setRampReading(exit, reply.count);
+  rampReadings.push({ exit, count: reply.count, truth, ms: reply.latencyMs });
+  ($('hw-frame') as HTMLImageElement).src = dataUrl;
+  $('hw-camera').hidden = false;
+  $('hw-boxes').innerHTML = reply.boxes
+    .map(([x0, y0, x1, y1]) => `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"></rect>`)
+    .join('');
+  const name = highwayView.layout.interchanges[exit].name;
+  $('hw-reading').hidden = false;
+  $('hw-reading').textContent = `${name} ramp camera: ${reply.model} counted ${reply.count} cars. Actual: ${truth}.`;
+}
+setInterval(() => void readRamp().catch((err) => console.warn('Ramp photo failed', err)), RAMP_FRAME_MS);
+
 renderSystems($('systems-list'), systems, applySystem);
 
 const systemsButton = $('systems-open');
@@ -1278,4 +1311,4 @@ showSelection();
 if (params.get('time')) setSystem('timeOfDay', params.get('time')!);
 
 // For scripted test runs.
-Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway } });
+Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway, rampReadings } });

@@ -99,6 +99,7 @@ const ADVICE_EVERY = 5;
 const SLOW_MPH = 30;
 const HARD_BRAKE = -3.5;
 const LANE_COOLDOWN = 3;
+const READING_FRESH_SECONDS = 15;
 const EXIT_SLOWDOWN_METERS = 220;
 const LAST_CHANCE_METERS = 90;
 const STOP_AND_WAIT_METERS = 35;
@@ -117,7 +118,7 @@ function mulberry(seed: number) {
 }
 
 /** Builds a day's drivers. Same seed, same people, so modes are compared on identical demand. */
-export function makeHighwayDemand(layout: HighwayLayout, seed: number, perHour: number, spanSeconds: number, zoneWeights: number[]): HighwayDemand[] {
+export function makeHighwayDemand(layout: HighwayLayout, seed: number, perHour: number, spanSeconds: number, zoneWeights: number[], earlier = 1): HighwayDemand[] {
   const random = mulberry(seed);
   const count = Math.round((perHour * spanSeconds) / 3600);
   const total = zoneWeights.reduce((a, b) => a + b, 0);
@@ -130,7 +131,7 @@ export function makeHighwayDemand(layout: HighwayLayout, seed: number, perHour: 
     while (pick > zoneWeights[zone] && zone < n - 1) pick -= zoneWeights[zone++];
     if (zone === entry) zone = (zone + 1 + Math.floor(random() * (n - 1))) % n;
     // Most people move over a few hundred metres out. Some leave it very late.
-    const decisionMeters = 120 + 480 * random() * random();
+    const decisionMeters = (120 + 480 * random() * random()) * earlier;
     demand.push({
       at: random() * spanSeconds,
       entry,
@@ -163,6 +164,8 @@ export class HighwaySim {
   private readonly rampGreen: number[];
   private readonly crossQueue: number[];
   private readonly random: () => number;
+  /** Real counts from a vision model. When one is fresh it replaces the simulated camera for that ramp. */
+  private readonly rampReadings = new Map<number, { count: number; at: number }>();
   private nextDemand = 0;
   private lastReport = -Infinity;
   private lastAdvice = -Infinity;
@@ -267,6 +270,8 @@ export class HighwaySim {
       this.offRamps.forEach((ramp, i) => {
         let seen = 0;
         for (let k = 0; k < ramp.length; k++) if (this.random() < this.config.cameraRecall) seen++;
+        const reading = this.rampReadings.get(i);
+        if (reading && now - reading.at <= READING_FRESH_SECONDS) seen = reading.count;
         this.tes!.reportRampCamera(i, seen, Math.round(this.crossQueue[i]), now);
       });
       const advice = this.tes.advise(now);
@@ -284,6 +289,16 @@ export class HighwaySim {
         }
       }
     }
+  }
+
+  /** Takes a count that a vision model read from a real frame of this ramp. */
+  setRampReading(exit: number, count: number) {
+    this.rampReadings.set(exit, { count, at: this.time });
+  }
+
+  /** Ramps currently running on real vision counts. */
+  get visionRamps() {
+    return [...this.rampReadings.values()].filter((r) => this.time - r.at <= READING_FRESH_SECONDS).length;
   }
 
   private updateSignals(dt: number) {
