@@ -60,7 +60,17 @@ Next:
 - More compute: larger cities and more candidates per round should find more, and that is untested until someone runs it.
 - Real isolation: production would run generated code in a locked-down container, not only an allowlist.
 
-## Real places in 3D
+## Making the Los Angeles test more realistic
+
+The current study is a calm version of a city. These tests would show how far its results carry:
+
+- Habit drivers: some drivers ignore traffic and take their usual route. Started.
+- Follow-through: some TES drivers ignore their route.
+- Incidents: crashes, closures and events that break plans.
+- Pedestrians and turning conflicts, which the road model leaves out.
+- Mid-trip rerouting for app drivers, which helps the baseline.
+- Induced demand: faster roads draw more trips over time, which works against any gain.
+
 
 Goal: pick a location, such as downtown Los Angeles, and run the 3D sim on it.
 

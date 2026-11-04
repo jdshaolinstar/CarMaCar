@@ -46,6 +46,8 @@ export interface RunConfig {
   edgeWeights?: Float32Array;
   /** Replaces the road cost TES routes on. This is where a tuned or generated algorithm plugs in. */
   roadCost?: (road: RoadState) => number;
+  /** Share of drivers not on TES who take their usual route and ignore traffic, as many real drivers do. */
+  habitShare?: number;
   /** How many batches TES plans each reroute, so each batch sees the plans of the last. */
   tesSlices?: number;
   /** Set false to count load against the whole road, as early runs did. A few TES cars then see every road as empty. */
@@ -653,17 +655,23 @@ export class MetroSim {
       if (now % config.rerouteSeconds === 0) {
         this.updateObserved();
         const horizon = now + config.rerouteSeconds;
+        const habitLine = (config.habitShare ?? 0) * (1 - config.tesShare);
         this.planningTime = now;
         const tes: number[] = [];
         const rest: number[] = [];
+        const habit: number[] = [];
         let scan = next;
         while (scan < order.length && trips[order[scan]].depart < horizon) {
           const car = order[scan++];
-          (this.onTes[car] ? tes : rest).push(car);
+          // The same drivers are habit drivers in every run, so comparisons stay paired.
+          if (this.onTes[car]) tes.push(car);
+          else if (trips[car].adoptionRoll > 1 - habitLine) habit.push(car);
+          else rest.push(car);
         }
         // TES cars plan around the routes it already knows, so non-TES drivers go first only if
         // they are also coordinated. Apps cannot see each other's plans.
         if (rest.length > 0) this.assign(rest, config.baseline);
+        if (habit.length > 0) this.assign(habit, 'free-flow');
         if (tes.length > 0) this.assign(tes, 'coordinated');
       }
       while (next < order.length && trips[order[next]].depart <= now) {

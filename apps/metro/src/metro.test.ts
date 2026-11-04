@@ -181,3 +181,14 @@ test('at full adoption, measuring load against TES share changes nothing', () =>
   const aware = new MetroSim(network, z, trips(200, 1800), config({ ...settings, shareAwareLoad: false })).run();
   assert.equal(plain.meanMinutes, aware.meanMinutes);
 });
+
+test('habit drivers ignore traffic, and setting none changes nothing', () => {
+  const { network, z } = setup();
+  const settings = { baseline: 'live-traffic' as const, sampleRate: 0.2, horizonSeconds: 7200 };
+  const plain = new MetroSim(network, z, trips(300, 1800), config(settings)).run();
+  const none = new MetroSim(network, z, trips(300, 1800), config({ ...settings, habitShare: 0 })).run();
+  assert.equal(plain.meanMinutes, none.meanMinutes);
+  const habit = new MetroSim(network, z, trips(300, 1800), config({ ...settings, habitShare: 1 })).run();
+  assert.ok(habit.meanMinutes >= plain.meanMinutes, `${habit.meanMinutes} and ${plain.meanMinutes}`);
+});
+

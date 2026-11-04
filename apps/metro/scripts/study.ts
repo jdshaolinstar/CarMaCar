@@ -63,6 +63,7 @@ for (const id of ids) {
     roadCost: lab?.winner.code ? compileAlgorithm(lab.winner.code) : lab?.winner.params ? paramCost(lab.winner.params) : undefined,
     tesSlices: lab?.winner.params?.slices,
     shareAwareLoad: run.shareAware,
+    habitShare: Number(process.env.HABIT ?? 0),
     frameSeconds: FRAME_MINUTES * 60,
     onFrame: (f) => {
       const index = perFrame.length;
