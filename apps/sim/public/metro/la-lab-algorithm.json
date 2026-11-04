@@ -1,0 +1,192 @@
+{
+ "mode": "algorithm",
+ "model": "muse-spark-1.3-contributor",
+ "status": "Finished",
+ "simTest": {
+  "cars": 20000,
+  "capacity": 2,
+  "tesShare": 0.6,
+  "rerouteSeconds": 600,
+  "trainSeed": 11,
+  "heldOutSeed": 12
+ },
+ "tokens": 60465,
+ "tokenBudget": 100000,
+ "estimatedCostUsd": 0.0112386,
+ "references": {
+  "apps": {
+   "meanMinutes": 30.81535411519434,
+   "rushMeanMinutes": 33.35825044350527,
+   "vehicleHours": 1034000.6009950927,
+   "delayHours": 275206.2611060904,
+   "vehicleKm": 50528639.37357466,
+   "finishedShare": 0.9945554498361349,
+   "seconds": 570
+  },
+  "handTuned": {
+   "meanMinutes": 30.150363101345246,
+   "rushMeanMinutes": 32.600676060341435,
+   "vehicleHours": 1008630.3169277292,
+   "delayHours": 250878.63281684625,
+   "vehicleKm": 50492046.37930281,
+   "finishedShare": 0.9946611692567925,
+   "seconds": 1293
+  }
+ },
+ "rounds": [
+  {
+   "round": 1,
+   "candidates": [
+    {
+     "name": "Early Marginal Spreading",
+     "idea": "Adds an early quadratic plus steep quartic marginal-style penalty on planned load with live-time inflation and peak plus ramp plus signal plus low-capacity buffers to divert routes before saturation.",
+     "code": "const F = road.freeSeconds; let V = road.liveSeconds; let L = road.load; if (L < 0) L = 0; let L2 = L * L; let L4 = L2 * L2; let peak = 0; if (road.hour > 6.5) { if (road.hour < 9.5) { peak = 1; } else { if (road.hour > 15.5) { if (road.hour < 19.5) { peak = 1; } } } } let cong = 0.9 * L2 + 1.6 * L4; if (peak > 0) cong = cong + 0.5 * L2; let bpr = F * (1 + cong); let base = F; if (V > F) base = V; let live = base * (1 + 0.35 * L2); if (peak > 0) live = live + base * 0.15 * L2; let cost = bpr; if (live > bpr) cost = live; if (road.isRamp > 0) cost = cost + F * 0.1 + F * 0.3 * L2; if (road.hasSignal > 0) cost = cost + F * 0.2 * L2; if (road.capacityPerHour < 800) cost = cost + F * 0.15 * L2; if (road.isFreeway > 0) cost = cost * 0.97; return cost;",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.278392843742232,
+      "rushMeanMinutes": 31.201020762808653,
+      "vehicleHours": 976190.0099248566,
+      "delayHours": 218910.08304903386,
+      "vehicleKm": 50532939.67244243,
+      "finishedShare": 0.9949783275187652,
+      "seconds": 1025
+     },
+     "gainPercent": 3.216273242875071
+    },
+    {
+     "name": "Differentiated Marginal Tolls",
+     "idea": "Adding type specific marginal externality tolls spreads selfish routing toward system optimum by protecting freeways and strongly penalizing ramp overloads while leaving surface streets as relief.",
+     "code": "const f = road.freeSeconds\nconst lv = road.liveSeconds\nconst q = road.load\nconst q2 = q * q\nconst q4 = q2 * q2\nlet priv = f * (1 + 0.45 * q4)\nif (lv > priv) priv = lv\nlet toll = f * (0.25 * q2 + 0.65 * q4)\nif (road.isRamp > 0) toll = f * (0.9 * q2 + 2.2 * q4)\nelse if (road.isFreeway > 0) toll = f * (0.5 * q2 + 1.5 * q4)\nlet mult = 1\nif (road.hour > 6.5) if (road.hour < 9.5) mult = 1.3\nif (road.hour > 15.5) if (road.hour < 19.5) mult = 1.3\nreturn priv + mult * toll",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 28.83686273132719,
+      "rushMeanMinutes": 30.51227801970271,
+      "vehicleHours": 959635.4016228386,
+      "delayHours": 202105.6132611386,
+      "vehicleKm": 50474272.07213465,
+      "finishedShare": 0.9949783275187652,
+      "seconds": 1028
+     },
+     "gainPercent": 4.857569169061692
+    },
+    {
+     "name": "Peak Reserving Toll",
+     "idea": "Time-varying marginal toll with peak-centered reservation spreads early flow off freeways and ramps, peaks tolls during buildup, then relaxes after clearing while protecting low-capacity signal roads.",
+     "code": "const f = road.freeSeconds;\nconst lv = road.liveSeconds;\nconst l = road.load;\nconst h = road.hour;\nconst d = h - 8.1;\nconst peak = Math.exp(-d * d / 1.4);\nconst l4 = Math.pow(l, 4);\nconst bpr = f * (1 + 0.45 * l4);\nlet base = bpr;\nif (lv > bpr) {\nbase = lv;\n}\nlet reserve = 0.05;\nif (road.isFreeway > 0) {\nreserve = 0.28;\n} else {\nif (road.isRamp > 0) {\nreserve = 0.35;\n} else {\nif (road.isArterial > 0) {\nreserve = 0.1;\n}\n}\n}\nlet sig = 0;\nif (road.hasSignal > 0) {\nsig = 0.12;\n}\nconst eff = l + peak * (reserve + sig);\nconst eff4 = Math.pow(eff, 4);\nlet tollMult = 0.6 + 2.2 * peak;\nif (h < 6) {\ntollMult = 0.5;\n} else {\nif (h > 9.5) {\ntollMult = 0.7;\n}\n}\nlet typeMult = 1;\nif (road.isFreeway > 0) {\ntypeMult = 1.15;\n} else {\nif (road.isRamp > 0) {\ntypeMult = 1.6;\n} else {\nif (road.hasSignal > 0) {\ntypeMult = 1.25;\n}\n}\n}\nlet capMult = 1;\nif (road.capacityPerHour < 600) {\ncapMult = 1.4;\n} else {\nif (road.capacityPerHour < 1200) {\ncapMult = 1.15;\n}\n}\nconst toll = f * tollMult * typeMult * capMult * eff4;\nlet cost = base + toll;\nif (road.isRamp > 0) {\ncost = cost + f * (0.3 + 1.1 * peak) * l;\n}\nreturn cost;",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.174343789931005,
+      "rushMeanMinutes": 30.9854063457792,
+      "vehicleHours": 972356.5293222296,
+      "delayHours": 211480.7806232528,
+      "vehicleKm": 50421403.562566385,
+      "finishedShare": 0.9948726080981076,
+      "seconds": 1048
+     },
+     "gainPercent": 3.596341196246109
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "candidates": [
+    {
+     "name": "Tiered Early Overload Toll",
+     "idea": "Tiered quadratic tolls spread planned load early by road type with peak and low-capacity multipliers plus a steep wall past 90 percent load to prevent queue spillover.",
+     "code": "const f = road.freeSeconds; const lv = road.liveSeconds; let q = road.load; if (q < 0) q = 0; const q2 = q * q; const q4 = q2 * q2; let bpr = f * (1 + 0.45 * q4); let priv = bpr; if (lv > bpr) priv = lv; let a2 = 0.5; let a4 = 1.0; if (road.isRamp > 0) { a2 = 1.4; a4 = 3.0; } else { if (road.isFreeway > 0) { a2 = 0.8; a4 = 2.0; } else { if (road.hasSignal > 0) { a2 = 0.65; a4 = 1.3; } } } let mult = 1; if (road.hour > 6.5) { if (road.hour < 9.5) { mult = 1.4; } else { if (road.hour > 15.5) { if (road.hour < 19.5) { mult = 1.4; } } } } let cm = 1; if (road.capacityPerHour < 600) { cm = 1.4; } else { if (road.capacityPerHour < 1200) { cm = 1.15; } } let om = 0; if (q > 0.9) om = q - 0.9; let overload = om * om * 12; let toll = mult * cm * (a2 * q2 + a4 * q4) + overload * q2; return priv + f * toll;",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 28.636156173199314,
+      "rushMeanMinutes": 30.26723689730324,
+      "vehicleHours": 952023.2041592745,
+      "delayHours": 194728.84676614666,
+      "vehicleKm": 50402572.43054734,
+      "finishedShare": 0.9950840469394228,
+      "seconds": 930
+     },
+     "gainPercent": 5.612275560076264
+    },
+    {
+     "name": "Ramp Spillback Hierarchy",
+     "idea": "Ramps get fixed plus convex spillback tolls, freeways stay cheap when empty but steep when full, and locals are protected so arterials absorb relief.",
+     "code": "const f = road.freeSeconds; const lv = road.liveSeconds; let q = road.load; if (q < 0) q = 0; const q2 = q * q; const q4 = q2 * q2; const q6 = q4 * q2; let priv = f * (1 + 0.45 * q4); if (lv > priv) priv = lv; let peak = 0; if (road.hour > 6.5) { if (road.hour < 9.5) peak = 1; else { if (road.hour > 15.5) { if (road.hour < 19.5) peak = 1; } } } let toll = 0; if (road.isRamp > 0) { toll = f * (0.6 * q2 + 2.0 * q4 + 1.2 * q6) + f * 0.25 + 6 * q2 + 18 * q4; if (peak > 0) toll = toll * 1.5; } else { if (road.isFreeway > 0) { toll = f * (0.12 * q2 + 1.7 * q4 + 1.4 * q6); if (peak > 0) toll = toll * 1.45; if (q < 0.6) toll = toll * 0.7; } else { if (road.isArterial > 0) { toll = f * (0.18 * q2 + 0.7 * q4); if (road.hasSignal > 0) toll = toll + f * 0.25 * q2; if (peak > 0) toll = toll * 1.2; } else { toll = f * (0.35 * q2 + 1.0 * q4); if (road.hasSignal > 0) toll = toll + f * 0.3 * q2; if (road.capacityPerHour < 800) toll = toll + f * 0.4 * q2 + 4 * q2; if (peak > 0) toll = toll * 1.2; } } } return priv + toll;",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.123947342103598,
+      "rushMeanMinutes": 31.091487018251332,
+      "vehicleHours": 970226.4602017323,
+      "delayHours": 212056.96826403067,
+      "vehicleKm": 50313921.42220669,
+      "finishedShare": 0.9946083095464637,
+      "seconds": 937
+     },
+     "gainPercent": 3.80752552064609
+    },
+    {
+     "name": "Anticipatory Morning Metering",
+     "idea": "Tolls ramp up steeply into the 8am buildup to preserve freeway and ramp headroom, then drop fast after 9am so queues flush without wasteful detours.",
+     "code": "const f = road.freeSeconds\nconst lv = road.liveSeconds\nlet q = road.load\nif (q < 0) q = 0\nconst q2 = q * q\nconst q4 = q2 * q2\nlet priv = f * (1 + 0.45 * q4)\nif (lv > priv) priv = lv\nlet c2 = 0.25\nlet c4 = 0.65\nif (road.isFreeway > 0) {\nc2 = 0.5\nc4 = 1.5\n}\nif (road.isRamp > 0) {\nc2 = 0.9\nc4 = 2.2\n}\nif (road.hasSignal > 0) {\nc2 = c2 + 0.15\nc4 = c4 + 0.3\n}\nlet capM = 1\nif (road.capacityPerHour < 1200) {\ncapM = 1.1\n}\nif (road.capacityPerHour < 600) {\ncapM = 1.25\n}\nconst h = road.hour\nlet tm = 0.5\nif (h > 5.5) {\ntm = 0.7\n}\nif (h > 6.5) {\ntm = 1.0\n}\nif (h > 7.25) {\ntm = 1.35\n}\nif (h > 8) {\ntm = 1.7\n}\nif (h > 8.75) {\ntm = 1.45\n}\nif (h > 9.25) {\ntm = 0.9\n}\nif (h > 10) {\ntm = 0.6\n}\nif (h > 15.5) {\ntm = 1.0\n}\nif (h > 16.5) {\ntm = 1.35\n}\nif (h > 18) {\ntm = 1.15\n}\nif (h > 19) {\ntm = 0.7\n}\nif (h > 20) {\ntm = 0.5\n}\nlet spillK = 0.4\nif (road.isFreeway > 0) {\nspillK = 0.6\n}\nif (road.isRamp > 0) {\nspillK = 0.8\n}\nlet extra = 0\nif (lv > f) {\nextra = (lv - f) * 0.1 + (lv - f) * q * spillK\n}\nconst toll = f * tm * capM * (c2 * q2 + c4 * q4)\nlet cost = priv + toll + extra + 0.01\nreturn cost;",
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.210667220878662,
+      "rushMeanMinutes": 31.048725770065598,
+      "vehicleHours": 973765.9336181433,
+      "delayHours": 214275.00216040338,
+      "vehicleKm": 50399329.62130371,
+      "finishedShare": 0.9949254678084364,
+      "seconds": 932
+     },
+     "gainPercent": 3.456606719474998
+    }
+   ]
+  }
+ ],
+ "winner": {
+  "name": "Tiered Early Overload Toll",
+  "idea": "Tiered quadratic tolls spread planned load early by road type with peak and low-capacity multipliers plus a steep wall past 90 percent load to prevent queue spillover.",
+  "code": "const f = road.freeSeconds; const lv = road.liveSeconds; let q = road.load; if (q < 0) q = 0; const q2 = q * q; const q4 = q2 * q2; let bpr = f * (1 + 0.45 * q4); let priv = bpr; if (lv > bpr) priv = lv; let a2 = 0.5; let a4 = 1.0; if (road.isRamp > 0) { a2 = 1.4; a4 = 3.0; } else { if (road.isFreeway > 0) { a2 = 0.8; a4 = 2.0; } else { if (road.hasSignal > 0) { a2 = 0.65; a4 = 1.3; } } } let mult = 1; if (road.hour > 6.5) { if (road.hour < 9.5) { mult = 1.4; } else { if (road.hour > 15.5) { if (road.hour < 19.5) { mult = 1.4; } } } } let cm = 1; if (road.capacityPerHour < 600) { cm = 1.4; } else { if (road.capacityPerHour < 1200) { cm = 1.15; } } let om = 0; if (q > 0.9) om = q - 0.9; let overload = om * om * 12; let toll = mult * cm * (a2 * q2 + a4 * q4) + overload * q2; return priv + f * toll;",
+  "verdict": "tested",
+  "scores": {
+   "meanMinutes": 28.636156173199314,
+   "rushMeanMinutes": 30.26723689730324,
+   "vehicleHours": 952023.2041592745,
+   "delayHours": 194728.84676614666,
+   "vehicleKm": 50402572.43054734,
+   "finishedShare": 0.9950840469394228,
+   "seconds": 930
+  },
+  "gainPercent": 5.612275560076264
+ },
+ "heldOut": {
+  "winner": {
+   "meanMinutes": 29.079491399528624,
+   "rushMeanMinutes": 30.802168129787688,
+   "vehicleHours": 973365.7492931574,
+   "delayHours": 211151.67691102411,
+   "vehicleKm": 50755181.39439332,
+   "finishedShare": 0.9949441752685907,
+   "seconds": 895
+  },
+  "handTuned": {
+   "meanMinutes": 29.982775930109256,
+   "rushMeanMinutes": 32.0304266479057,
+   "vehicleHours": 1007246.1466239981,
+   "delayHours": 246490.73051560344,
+   "vehicleKm": 50844354.69625108,
+   "finishedShare": 0.9944175268590689,
+   "seconds": 891
+  },
+  "apps": {
+   "meanMinutes": 30.726057651898653,
+   "rushMeanMinutes": 33.23299259947105,
+   "vehicleHours": 1033617.7824972745,
+   "delayHours": 271877.13126234367,
+   "vehicleKm": 50798485.38948057,
+   "finishedShare": 0.9932589003581209,
+   "seconds": 295
+  },
+  "gainPercent": 3.363666115219019
+ },
+ "verdict": "Adopted: Tiered Early Overload Toll beat the hand-tuned system by 3.36% on commuters it never saw.",
+ "lesson": "Tiered tolls that rise early with congestion, charge extra for ramps, freeways, signals and low capacity roads during peaks, and add a steep overload penalty worked best and held up on unseen commuters, while broad spreading, fixed peak reserves, and elaborate ramp or morning metering schemes improved less. Next I would tune the peak windows and overload thresholds around that winning tiered structure and validate reliability across more demand patterns."
+}

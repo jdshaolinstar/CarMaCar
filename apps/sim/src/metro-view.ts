@@ -256,6 +256,27 @@ const LAB_MODES: { id: LabSession['mode']; label: string }[] = [
   { id: 'params', label: 'Muse tunes settings' },
 ];
 
+/** Lays out generated code for reading. Models often return it as one long line. */
+function readable(code: string) {
+  const lines = code.replace(/;\s*/g, ';
+').replace(/\{\s*/g, '{
+').replace(/\s*\}\s*/g, '
+}
+').split('
+');
+  let depth = 0;
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('}')) depth = Math.max(0, depth - 1);
+    out.push(`${'  '.repeat(depth)}${line}`);
+    if (line.endsWith('{')) depth++;
+  }
+  return out.join('
+');
+}
+
 /** The recorded sessions. Sessions run offline, because a static page has no simulator behind it. */
 async function startLab() {
   // Candidates differ by small amounts, so the Lab shows whole numbers instead of 1.0M.
@@ -273,7 +294,7 @@ async function startLab() {
   function showCode(candidate: LabCandidate) {
     $('lab-code-name').textContent = candidate.name;
     $('lab-code-idea').textContent = candidate.idea;
-    $('lab-code').textContent = candidate.code ?? JSON.stringify(candidate.params, null, 2);
+    $('lab-code').textContent = candidate.code ? readable(candidate.code) : JSON.stringify(candidate.params, null, 2);
   }
 
   function show() {
@@ -417,10 +438,11 @@ async function main() {
   function showSummary() {
     $('right-name').textContent = active.label;
     const hours = baseline.vehicleHours - active.vehicleHours;
+    const fuel = baseline.fuelLitres - active.fuelLitres;
     const items: [string, string][] = [
       [`${baseline.rushMeanMinutes.toFixed(0)} to ${active.rushMeanMinutes.toFixed(0)} min`, 'Average rush-hour trip'],
-      [big(hours), 'Vehicle-hours saved this morning'],
-      [`${big(baseline.fuelLitres - active.fuelLitres)} L`, 'Fuel saved, estimated'],
+      [big(Math.abs(hours)), hours >= 0 ? 'Vehicle-hours saved this morning' : 'Extra vehicle-hours this morning'],
+      [`${big(Math.abs(fuel))} L`, fuel >= 0 ? 'Fuel saved, estimated' : 'Extra fuel, estimated'],
       [`${big(baseline.delayHours)} to ${big(active.delayHours)}`, 'Hours of delay'],
     ];
     $('summary').replaceChildren(

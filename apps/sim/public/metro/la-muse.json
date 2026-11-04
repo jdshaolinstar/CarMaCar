@@ -1,0 +1,94 @@
+{
+ "model": "muse-spark-1.3-contributor",
+ "runId": "tes100",
+ "facts": {
+  "driversModeled": 2391329,
+  "tesShareOfDrivers": "100%",
+  "averageCommuteMinutes": {
+   "today": 30.3,
+   "withTes": 28.3
+  },
+  "rushHourCommuteMinutes": {
+   "today": 32.5,
+   "withTes": 29.6
+  },
+  "vehicleHours": {
+   "today": 1019442,
+   "withTes": 944271,
+   "percentLess": 7.4
+  },
+  "delayHours": {
+   "today": 231914,
+   "withTes": 164939,
+   "percentLess": 28.9
+  },
+  "vehicleKm": {
+   "today": 51715143,
+   "withTes": 51624154
+  },
+  "fuelLitres": {
+   "today": 4448025,
+   "withTes": 4371567,
+   "percentLess": 1.7
+  },
+  "roads": [
+   {
+    "road": "I 10",
+    "jammedKmHoursToday": 25,
+    "jammedKmHoursWithTes": 18
+   },
+   {
+    "road": "I 405",
+    "jammedKmHoursToday": 23,
+    "jammedKmHoursWithTes": 16
+   },
+   {
+    "road": "I 5",
+    "jammedKmHoursToday": 22,
+    "jammedKmHoursWithTes": 21
+   },
+   {
+    "road": "I 110 EXPR",
+    "jammedKmHoursToday": 21,
+    "jammedKmHoursWithTes": 10
+   },
+   {
+    "road": "US 101",
+    "jammedKmHoursToday": 18,
+    "jammedKmHoursWithTes": 17
+   },
+   {
+    "road": "I 10 EXPR",
+    "jammedKmHoursToday": 14,
+    "jammedKmHoursWithTes": 6
+   },
+   {
+    "road": "Santa Monica Boulevard",
+    "jammedKmHoursToday": 8,
+    "jammedKmHoursWithTes": 7
+   },
+   {
+    "road": "East Alvarado Street",
+    "jammedKmHoursToday": 7,
+    "jammedKmHoursWithTes": 8
+   },
+   {
+    "road": "I 110",
+    "jammedKmHoursToday": 7,
+    "jammedKmHoursWithTes": 9
+   },
+   {
+    "road": "CA 110",
+    "jammedKmHoursToday": 7,
+    "jammedKmHoursWithTes": 7
+   }
+  ]
+ },
+ "caution": "This modeled result does not prove lasting citywide benefits beyond this simulated commute.",
+ "findings": [
+  "Modeled average commute was 30.3 minutes today and 28.3 minutes with TES.",
+  "Modeled delay hours were 28.9% less with TES.",
+  "Modeled jammed km-hours fell on I 110 EXPR from 21 to 10, while I 110 was worse from 7 to 9 and CA 110 barely changed at 7."
+ ],
+ "headline": "Modeled morning commute for 2.39 million drivers with 100% TES eased congestion on Los Angeles's real road network."
+}

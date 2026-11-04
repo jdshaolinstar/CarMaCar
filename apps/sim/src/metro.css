@@ -70,7 +70,7 @@ button { cursor: pointer; font-weight: 600; }
 .lab-grid > * { min-width: 0; }
 .lab-code h3 { font-size: 15px; font-weight: 800; }
 .lab-code p { font-size: 14px; color: var(--muted); line-height: 1.3; margin: 2px 0 6px; }
-.lab-code pre { max-height: 240px; overflow: auto; padding: 8px 10px; background: #14171a; border-radius: 4px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+.lab-code pre { max-height: 300px; overflow: auto; padding: 8px 10px; background: #14171a; border-radius: 4px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
 .lab-foot { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.35; }
 @media (max-width: 900px) { .lab-grid { grid-template-columns: 1fr; } }
 .note { padding: 0 16px 8px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }

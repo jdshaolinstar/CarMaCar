@@ -76,7 +76,7 @@ async function ask(feedback: string) {
       {
         role: 'system',
         content:
-          "You brief a city transportation director on a simulated morning commute on Los Angeles's real road network. Use only numbers from the facts, written exactly as given or rounded from them to fewer digits. Do not calculate new numbers, percentages or dollar values. Say modeled, not measured. If something got worse or barely changed, say so.",
+          "You brief a city transportation director on a simulated morning commute on Los Angeles's real road network. Use only numbers from the facts, written exactly as given or rounded from them to fewer digits. Write large numbers rounded, such as 2.39 million or 232 thousand, never as long digit strings. Use a percentLess value only where it is given. Do not calculate new numbers, percentages or dollar values. Say modeled, not measured. If something got worse or barely changed, say so.",
       },
       { role: 'user', content: `Facts: ${JSON.stringify(facts)}${feedback}` },
     ],
@@ -108,6 +108,9 @@ if (wrong.length) {
 }
 if (wrong.length) throw new Error(`Summary still has unsupported numbers: ${wrong.join(', ')}`);
 
+// The model sometimes changes the product's capitalization.
+const named = (text: string) => text.replace(/TEs/g, 'TES');
+summary = { headline: named(summary.headline), findings: summary.findings.map(named), caution: named(summary.caution) };
 console.log(JSON.stringify(summary, null, 1));
 console.log(`tokens ${tokens}`);
 writeFileSync(new URL('../../sim/public/metro/la-muse.json', import.meta.url), JSON.stringify({ model: MODEL, runId: targetId, facts, ...summary }, null, 1));
