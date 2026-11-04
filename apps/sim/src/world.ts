@@ -15,6 +15,7 @@ import {
   type TwinSnapshot,
   type Vec2,
 } from '@carmacar/shared';
+import { movementOf, movementsConflict, Signals, type Movement } from './signals';
 
 export type Role = 'parked' | 'scout' | 'network' | 'manual' | 'hero';
 type Phase = 'drive' | 'parkIn' | 'parked' | 'parkOut';
@@ -45,6 +46,11 @@ export interface Car {
   parkFrom: Vec2;
   parkFromHeading: Vec2;
   leaveAt: number;
+  /** Distance along the current path of the next stop line. Infinity when there is none. */
+  stopS: number;
+  movement: Movement | null;
+  /** The intersection this car is inside. */
+  junction: string | null;
   spawnedAt: number;
   meters: number;
   metersSinceCapture: number;
@@ -79,7 +85,22 @@ export interface DemandItem {
 const CRUISE_SPEED = 11;
 const APPROACH_SPEED = 4.5;
 const APPROACH_DISTANCE = 30;
-const FOLLOW_GAP = 8.5;
+/** Center-to-center distance kept behind the car ahead. */
+const FOLLOW_GAP = 6.5;
+const GAP_LOOKAHEAD = 24;
+const GAP_STEP = 1.5;
+const STOP_LOOKAHEAD = 40;
+const STOP_LINE_SETBACK = 1;
+const ACCELERATION = 3;
+const COMFORT_BRAKING = 4;
+const HARD_BRAKING = 8;
+
+const CLAIM_MARGIN = 2;
+
+const stoppingDistance = (speed: number) => (speed * speed) / (2 * COMFORT_BRAKING);
+
+/** Fastest speed from which a car can still stop within `distance` metres. */
+const brakingSpeed = (distance: number) => Math.sqrt(2 * COMFORT_BRAKING * Math.max(0, distance));
 const PARK_SECONDS = 2.4;
 const PARKED_MIN_SECONDS = 90;
 const PARKED_MAX_SECONDS = 420;
@@ -103,6 +124,9 @@ export class World {
   readonly stallOwner = new Map<string, string>();
   readonly stalls: Map<string, Stall>;
   readonly parkedLog: ParkedRecord[] = [];
+  readonly signals: Signals;
+  /** Node id to the cars currently inside that intersection. */
+  private readonly junctions = new Map<string, Set<string>>();
   time = 0;
   private nextId = 1;
   private demand: DemandItem[] = [];
@@ -115,6 +139,7 @@ export class World {
     private readonly parking: ParkingService | null,
   ) {
     this.graph = new RoadGraph(city);
+    this.signals = new Signals(city);
     this.stalls = new Map(city.stalls.map((s) => [s.id, s]));
     this.rng = makeRng(seed);
   }
@@ -151,6 +176,9 @@ export class World {
       parkFrom: pos,
       parkFromHeading: { x: 1, z: 0 },
       leaveAt: Infinity,
+      stopS: Infinity,
+      movement: null,
+      junction: null,
       spawnedAt: this.time,
       meters: 0,
       metersSinceCapture: 0,
@@ -198,7 +226,11 @@ export class World {
   addScouts(count: number) {
     const ids: string[] = [];
     for (let i = 0; i < count; i++) {
-      ids.push(this.blankCar('scout', this.randomEdge(), 0, '#00acc1').id);
+      let edge = this.randomEdge();
+      for (let tries = 0; tries < 20 && !this.laneClear(this.graph.lanePoint(edge, this.graph.corner), 9); tries++) {
+        edge = this.randomEdge();
+      }
+      ids.push(this.blankCar('scout', edge, 0, '#00acc1').id);
     }
     return ids;
   }
@@ -290,6 +322,8 @@ export class World {
   }
 
   private beginPath(car: Car) {
+    car.stopS = Infinity;
+    car.movement = null;
     const stall = car.targetStallId ? this.stalls.get(car.targetStallId) : null;
     if (car.mode === 'toStall' && stall) {
       const approach = this.graph.approachEdge(stall);
@@ -307,11 +341,17 @@ export class World {
     car.s = 0;
     car.endsAtStall = false;
     this.pendingEdge.set(car.id, next);
+    if (this.signals.has(car.edge.to)) {
+      const stopAlong = this.graph.edgeLength(car.edge) - this.graph.corner - STOP_LINE_SETBACK;
+      car.stopS = Math.max(0, stopAlong - car.startAlong);
+      car.movement = movementOf(this.graph.edgeDir(car.edge), this.graph.edgeDir(next));
+    }
   }
 
   private readonly pendingEdge = new Map<string, DirectedEdge>();
 
   private finishPath(car: Car) {
+    this.leaveJunction(car);
     if (car.endsAtStall) {
       const stallId = car.targetStallId!;
       if (this.stallOwner.has(stallId)) {
@@ -467,24 +507,71 @@ export class World {
     car.queue = [];
   }
 
+  /** Distance to the nearest car on the road this car is about to drive, following its path around corners. */
   private gapAhead(car: Car): number {
-    let nearest = Infinity;
-    for (const other of this.cars.values()) {
-      if (other === car || other.phase === 'parked') continue;
-      const d = sub(other.pos, car.pos);
-      const ahead = dot(d, car.heading);
-      if (ahead <= 0 || ahead > FOLLOW_GAP * 2) continue;
-      const lateral = Math.abs(d.x * car.heading.z - d.z * car.heading.x);
-      if (lateral > 1.5) continue;
-      if (dot(other.heading, car.heading) < 0) continue;
-      nearest = Math.min(nearest, ahead);
+    const path = car.path;
+    if (!path) return Infinity;
+    const nearby = [...this.cars.values()].filter(
+      (other) => other !== car && other.phase !== 'parked' && distance(other.pos, car.pos) < GAP_LOOKAHEAD + 5,
+    );
+    if (nearby.length === 0) return Infinity;
+    const end = path.sample(path.length);
+    for (let ahead = GAP_STEP; ahead <= GAP_LOOKAHEAD; ahead += GAP_STEP) {
+      const along = car.s + ahead;
+      const beyond = along - path.length;
+      // Past the end of this path the car carries straight on into its next street.
+      const point = beyond > 0 ? add(end.point, scale(end.tangent, beyond)) : path.sample(along).point;
+      for (const other of nearby) {
+        // A car pulling out of a stall is about to be in this lane, so give it room.
+        const reach = other.phase === 'parkOut' ? 4.5 : 1.9;
+        if (distance(other.pos, point) < reach) return ahead;
+      }
     }
-    return nearest;
+    return Infinity;
+  }
+
+  private mayEnterJunction(car: Car, toStopLine: number): boolean {
+    const nodeId = car.edge.to;
+    const direction = this.graph.edgeDir(car.edge);
+    const light = this.signals.state(nodeId, direction, this.time);
+    // On yellow, a car too close to stop safely carries on.
+    if (light === 'red' || (light === 'yellow' && stoppingDistance(car.speed) < toStopLine)) return false;
+    const mine = car.movement;
+    if (!mine) return true;
+    for (const id of this.junctions.get(nodeId) ?? []) {
+      const other = this.cars.get(id);
+      if (other?.movement && movementsConflict(mine, other.movement)) return false;
+    }
+    return true;
+  }
+
+  private enterJunction(car: Car) {
+    const nodeId = car.edge.to;
+    const inside = this.junctions.get(nodeId) ?? new Set<string>();
+    inside.add(car.id);
+    this.junctions.set(nodeId, inside);
+    car.junction = nodeId;
+  }
+
+  private leaveJunction(car: Car) {
+    if (car.junction) this.junctions.get(car.junction)?.delete(car.id);
+    car.junction = null;
+  }
+
+  /** Whether a stretch of lane is clear enough to pull out or spawn into. */
+  private laneClear(point: Vec2, radius: number, ignore?: Car): boolean {
+    for (const other of this.cars.values()) {
+      if (other !== ignore && other.phase !== 'parked' && distance(other.pos, point) < radius) return false;
+    }
+    return true;
   }
 
   tick(dt: number) {
     this.time += dt;
     while (this.demand.length > 0 && this.demand[0].at <= this.time) {
+      const item = this.demand[0];
+      // Join the road only where there is room. Otherwise wait for the next tick.
+      if (!this.laneClear(this.graph.lanePoint(item.startEdge, this.graph.corner), 9)) break;
       this.spawnDriver(this.demand.shift()!);
     }
 
@@ -494,7 +581,8 @@ export class World {
 
     for (const car of [...this.cars.values()]) {
       if (car.phase === 'parked') {
-        if (this.time >= car.leaveAt) this.beginLeaving(car);
+        // Wait for a gap before pulling out into the lane.
+        if (this.time >= car.leaveAt && this.laneClear(car.pos, 18, car)) this.beginLeaving(car);
         continue;
       }
       if (car.phase === 'parkIn' || car.phase === 'parkOut') {
@@ -519,12 +607,22 @@ export class World {
       const path = car.path;
       if (!path) continue;
 
-      const gap = this.gapAhead(car);
       // Drivers slow down when they near their spot, which also gives cameras time to look at it.
       const nearingStall = car.endsAtStall && path.length - car.s < APPROACH_DISTANCE;
-      const cruise = nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
-      const limit = gap < FOLLOW_GAP ? Math.min(cruise, Math.max(0, (gap - 5.5) * 1.2)) : cruise;
-      car.speed += Math.sign(limit - car.speed) * Math.min(Math.abs(limit - car.speed), 6 * dt);
+      let limit = nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
+      limit = Math.min(limit, brakingSpeed(this.gapAhead(car) - FOLLOW_GAP));
+
+      const toStopLine = car.stopS - car.s;
+      if (!car.junction && toStopLine < STOP_LOOKAHEAD) {
+        // Commit at the last point the car could still stop, so nothing can cut in after that.
+        const atBrakingPoint = toStopLine <= stoppingDistance(car.speed) + CLAIM_MARGIN;
+        const clear = this.mayEnterJunction(car, toStopLine);
+        if (clear && atBrakingPoint) this.enterJunction(car);
+        else if (!clear) limit = Math.min(limit, brakingSpeed(toStopLine));
+      }
+
+      const change = limit - car.speed;
+      car.speed += Math.sign(change) * Math.min(Math.abs(change), (change > 0 ? ACCELERATION : HARD_BRAKING) * dt);
       const step = car.speed * dt;
       car.s += step;
       car.meters += step;

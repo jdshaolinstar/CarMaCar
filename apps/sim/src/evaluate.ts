@@ -89,7 +89,7 @@ export async function runOnce(city: CityMap, config: RunConfig): Promise<RunResu
     world.tick(dt);
     // Lets the async parking replies land, as they would over the network.
     if (i % 5 === 0) await Promise.resolve();
-    if (i % 20 === 0) await new Promise((r) => setImmediate(r));
+    if (i % 20 === 0) await new Promise((r) => setTimeout(r));
   }
 
   const log = world.parkedLog.filter((r) => r.role === 'network' || r.role === 'manual');

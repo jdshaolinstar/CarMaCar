@@ -58,6 +58,65 @@ test('rerouting during a final approach never teleports the car', () => {
   assert.notEqual(world.stallOwner.get(first.id), hero.id);
 });
 
+/** Moving cars closer than this are overlapping. Lanes are 3.6 m apart, so passing traffic is fine. */
+const CRASH_DISTANCE = 2.6;
+
+function countCrashes(world: World, seconds: number) {
+  const seen = new Set<string>();
+  for (let t = 0; t < seconds; t += 1 / 20) {
+    world.tick(1 / 20);
+    const moving = [...world.cars.values()].filter((c) => c.phase === 'drive');
+    for (let i = 0; i < moving.length; i++) {
+      for (let j = i + 1; j < moving.length; j++) {
+        const a = moving[i];
+        const b = moving[j];
+        if (Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < CRASH_DISTANCE) seen.add([a.id, b.id].sort().join('+'));
+      }
+    }
+  }
+  return seen.size;
+}
+
+test('heavy traffic never crashes, with lights on', () => {
+  for (const seed of [12, 21, 34, 55]) {
+    const world = new World(city, seed, null);
+    world.populateParked(0.5);
+    world.addScouts(8);
+    world.setDemand(World.makeDemand(city, seed + 1, 60, 200, 0));
+    assert.equal(countCrashes(world, 500), 0, `seed ${seed}`);
+  }
+});
+
+test('traffic keeps moving and drivers still park', () => {
+  const world = new World(city, 14, null);
+  world.populateParked(0.5);
+  world.addScouts(8);
+  world.setDemand(World.makeDemand(city, 15, 60, 200, 0));
+  run(world, 500);
+  assert.ok(world.parkedLog.length >= 50, `parked ${world.parkedLog.length} of 60`);
+  const scoutsMoved = [...world.cars.values()].filter((c) => c.role === 'scout').every((c) => c.meters > 1000);
+  assert.ok(scoutsMoved, 'scouts should not be gridlocked');
+});
+
+test('a car waits at a red light', () => {
+  const world = new World(city, 16, null);
+  const hero = world.addHero();
+  hero.edge = { from: 'n0_1', to: 'n1_1' };
+  // The one thing that must never happen: crossing the stop line on a solid red.
+  let ranRed = false;
+  let stoppedAtRed = false;
+  for (let t = 0; t < 300; t += 1 / 20) {
+    const edge = hero.edge;
+    const wasWaiting = !hero.junction;
+    world.tick(1 / 20);
+    const state = world.signals.state(edge.to, world.graph.edgeDir(edge), world.time);
+    if (wasWaiting && hero.junction && state === 'red') ranRed = true;
+    if (hero.speed < 0.1 && state === 'red' && hero.stopS - hero.s < 3) stoppedAtRed = true;
+  }
+  assert.equal(ranRed, false);
+  assert.ok(stoppedAtRed, 'expected the car to meet at least one red light');
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };
