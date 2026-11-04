@@ -4,7 +4,7 @@ import { LiveMap } from './map';
 import { navigate } from './nav';
 import { PhoneApp } from './phone';
 import { PlatformClient } from './platform';
-import { CityScene, type CameraView } from './scene';
+import { CityScene, type CameraView, type TimeOfDay } from './scene';
 import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
 import { World, type Car, type NavMode, type Walker, CAR_COLORS } from './world';
@@ -559,6 +559,22 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: true },
   },
   {
+    id: 'timeOfDay',
+    name: 'Time of day',
+    description: 'Cameras see the same light, so night also tests the vision models.',
+    layer: 'simulation',
+    engine: 'Setting',
+    control: {
+      type: 'choice',
+      value: 'day',
+      options: [
+        { value: 'day', label: 'Day' },
+        { value: 'dusk', label: 'Dusk' },
+        { value: 'night', label: 'Night' },
+      ],
+    },
+  },
+  {
     id: 'speed',
     name: 'Simulation speed',
     description: 'How fast the city runs compared with real time.',
@@ -622,6 +638,7 @@ function applySystem(id: string, value: boolean | number | string) {
     lightsOn = value as boolean;
     syncTes();
   }  else if (id === 'speed') timeScale = value as number;
+  else if (id === 'timeOfDay') scene.setTimeOfDay(value as TimeOfDay);
 }
 
 renderSystems($('systems-list'), systems, applySystem);
@@ -1020,6 +1037,8 @@ photoLoop();
 setInterval(() => void pollTwin(), 700);
 setInterval(showSelection, 1000);
 showSelection();
+
+if (params.get('time')) setSystem('timeOfDay', params.get('time')!);
 
 // For scripted test runs.
 Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar } });

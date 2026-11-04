@@ -25,6 +25,7 @@ import type { LightState } from './signals';
 import { LIFT_SECONDS, type Car, type LitterKind, type Walker, type World } from './world';
 
 export type CameraView = 'city' | 'chase' | 'dash';
+export type TimeOfDay = 'day' | 'dusk' | 'night';
 
 /** Everything on this layer is invisible to capture cameras, so overlays cannot leak into frames. */
 const OVERLAY_LAYER = 0x10000000;
@@ -78,6 +79,26 @@ const VARIANTS: { width: number; length: number; profile: [number, number][]; gl
   },
 ];
 
+/** Windows only: dark walls with some rooms lit, used as the emissive layer at night. */
+function nightTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture('facade-night', { width: 512, height: 512 }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 512, 512);
+  for (let x = 0; x < 4; x++) {
+    for (let y = 0; y < 4; y++) {
+      const seeded = (x * 7 + y * 13) % 5;
+      if (seeded === 0 || seeded === 3) continue;
+      ctx.fillStyle = seeded === 1 ? '#ffd98a' : seeded === 2 ? '#ffc35c' : '#bcd6ff';
+      ctx.fillRect(x * 128 + 24, y * 128 + 26, 80, 76);
+    }
+  }
+  tex.update();
+  tex.wrapU = Texture.WRAP_ADDRESSMODE;
+  tex.wrapV = Texture.WRAP_ADDRESSMODE;
+  return tex;
+}
+
 function facadeTexture(scene: Scene, wall: string, glass: string): DynamicTexture {
   const tex = new DynamicTexture('facade', { width: 128, height: 128 }, scene, true);
   const ctx = tex.getContext() as CanvasRenderingContext2D;
@@ -104,6 +125,10 @@ export class CityScene {
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
   private view: CameraView = 'city';
+  private readonly hemi: HemisphericLight;
+  private readonly sun: DirectionalLight;
+  private readonly facadeMaterials: StandardMaterial[] = [];
+  private readonly nightLights: Mesh[] = [];
   private followedWalker: Walker | null = null;
   private readonly walkerMeshes = new Map<string, InstancedMesh>();
   private readonly litterMeshes = new Map<string, InstancedMesh>();
@@ -128,10 +153,12 @@ export class CityScene {
     this.scene.clearColor = new Color4(0.62, 0.78, 0.93, 1);
 
     const hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), this.scene);
+    this.hemi = hemi;
     hemi.intensity = 0.8;
     // Bounced light, so garage ceilings are not pitch black.
     hemi.groundColor = new Color3(0.6, 0.6, 0.6);
     const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, 0.35), this.scene);
+    this.sun = sun;
     sun.position = new Vector3(120, 180, -100);
     sun.intensity = 0.62;
     this.shadows = new ShadowGenerator(4096, sun);
@@ -187,6 +214,7 @@ export class CityScene {
     this.buildSignals();
     this.buildPeopleAndLitter();
     this.buildStreetLife();
+    for (const mesh of this.nightLights) mesh.setEnabled(false);
   }
 
   private garageAt(x0: number, x1: number, z0: number, z1: number) {
@@ -463,6 +491,12 @@ export class CityScene {
     const trunk = this.solid('#5d4632');
     const leaf = this.solid('#3f7d46');
     const metal = this.solid('#3a3f44');
+    const lampGlow = this.lampMaterial('#FFE3A8');
+    const lampPool = new StandardMaterial('lamp-pool', this.scene);
+    lampPool.emissiveColor = Color3.FromHexString('#FFD9A0');
+    lampPool.diffuseColor = Color3.Black();
+    lampPool.specularColor = Color3.Black();
+    lampPool.alpha = 0.16;
     const treeParts: Mesh[] = [];
     const lampParts: Mesh[] = [];
     const y = this.city.sidewalkHeight;
@@ -488,6 +522,16 @@ export class CityScene {
         pole.position.set(pos.x, y + 2.75, pos.z);
         pole.material = metal;
         lampParts.push(pole);
+        const glow = MeshBuilder.CreateSphere('lamp-glow', { diameter: 0.5, segments: 6 }, this.scene);
+        glow.position.set(pos.x, y + 5.6, pos.z);
+        glow.material = lampGlow;
+        glow.isPickable = false;
+        const pool = MeshBuilder.CreateDisc('lamp-pool', { radius: 7, tessellation: 20 }, this.scene);
+        pool.rotation.x = Math.PI / 2;
+        pool.position.set(pos.x, 0.09, pos.z);
+        pool.material = lampPool;
+        pool.isPickable = false;
+        this.nightLights.push(glow, pool);
       }
     }
     for (const parts of [treeParts, lampParts]) {
@@ -572,6 +616,12 @@ export class CityScene {
       const merged = Mesh.MergeMeshes(parts, true, true)!;
       const m = new StandardMaterial(`facade${i}`, this.scene);
       m.diffuseTexture = facadeTexture(this.scene, wall, glass);
+      const lit = nightTexture(this.scene);
+      lit.uScale = 0.25;
+      lit.vScale = 0.25;
+      lit.level = 0;
+      m.emissiveTexture = lit;
+      this.facadeMaterials.push(m);
       m.specularColor = new Color3(0.06, 0.06, 0.06);
       merged.material = m;
       merged.isPickable = false;
@@ -664,6 +714,25 @@ export class CityScene {
       plate.position.set(d.spot.x, d.y, d.spot.z);
       this.labels.push(plate);
     }
+  }
+
+  /** Sets the lighting. Capture cameras see the same light, so this also tests vision at night. */
+  setTimeOfDay(time: TimeOfDay) {
+    const look = {
+      day: { hemi: 0.8, sun: 0.62, sky: [0.62, 0.78, 0.93], ground: 0.6, night: 0 },
+      dusk: { hemi: 0.5, sun: 0.3, sky: [0.93, 0.56, 0.42], ground: 0.42, night: 0.6 },
+      night: { hemi: 0.3, sun: 0.04, sky: [0.04, 0.06, 0.12], ground: 0.26, night: 1 },
+    }[time];
+    this.hemi.intensity = look.hemi;
+    this.hemi.groundColor = new Color3(look.ground, look.ground, look.ground);
+    this.sun.intensity = look.sun;
+    const sky = new Color4(look.sky[0], look.sky[1], look.sky[2], 1);
+    this.scene.clearColor = sky;
+    this.frameTarget.clearColor = sky;
+    for (const m of this.facadeMaterials) {
+      if (m.emissiveTexture) m.emissiveTexture.level = look.night;
+    }
+    for (const mesh of this.nightLights) mesh.setEnabled(look.night > 0);
   }
 
   /** The route line drawn on the road for whoever is driving. */
