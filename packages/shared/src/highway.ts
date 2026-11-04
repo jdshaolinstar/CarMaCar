@@ -98,7 +98,7 @@ export interface HighwayTesOptions {
   harmonize: boolean;
 }
 
-export const PREPARE_METERS = 800;
+export const PREPARE_METERS = 380;
 const COMMIT_METERS = 450;
 const KEEP_LEFT_METERS = 400;
 const ARRIVAL_HORIZON_SECONDS = 90;
@@ -185,7 +185,8 @@ export class HighwayTes {
       const queue = fresh ? fresh.count : onRamp / this.share;
       const scaledArriving = arriving / this.share;
       const crossQueue = fresh?.cross ?? 0;
-      const rampGreen = this.chooseGreen(queue, scaledArriving, crossQueue);
+      // Without a camera TES can't see the cross street, so it has no basis for taking its green.
+      const rampGreen = fresh ? this.chooseGreen(queue, scaledArriving, crossQueue) : this.layout.baseRampGreen;
       const discharge = (saturationFlow * rampGreen) / cycleSeconds;
       const overflow = Math.max(0, queue - rampStorage * 0.4);
       return { exit: ic.id, queue, arriving: scaledArriving, crossQueue, rampGreen, waitSeconds: (queue + overflow) / discharge };

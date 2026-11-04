@@ -83,6 +83,10 @@ export interface HighwayResult {
   hardBrakeSeconds: number;
   /** Mean cross-street wait, so green time for the ramp is not treated as free. */
   crossDelaySeconds: number;
+  /** Cross-street cars waiting at the end, when the street has fallen behind. */
+  crossQueueLeft: number;
+  /** Highway trip time plus cross-street waiting, in vehicle-hours. The fair total. */
+  systemHours: number;
   /** Cars that overlapped. Should always be zero. */
   overlaps: number;
 }
@@ -628,6 +632,8 @@ export class HighwaySim {
       spillbackSeconds: this.spillback,
       hardBrakeSeconds: this.hardBrake,
       crossDelaySeconds: this.crossServed ? this.crossDelay / this.crossServed : 0,
+      crossQueueLeft: this.crossQueue.reduce((a, b) => a + b, 0),
+      systemHours: (total + this.crossDelay) / 3600,
       overlaps: this.overlaps,
     };
   }
