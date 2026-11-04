@@ -6,8 +6,8 @@
   "scripts": {
     "dev:sim": "npm run dev -w apps/sim",
     "dev:platform": "npm run dev -w apps/platform",
-    "typecheck": "tsc -p packages/shared --noEmit && tsc -p apps/platform --noEmit && tsc -p apps/sim --noEmit",
-    "test": "tsx --test packages/shared/test/*.test.ts apps/platform/test/*.test.ts apps/sim/src/*.test.ts"
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p apps/platform --noEmit && tsc -p apps/sim --noEmit && tsc -p apps/metro --noEmit",
+    "test": "tsx --test packages/shared/test/*.test.ts apps/platform/test/*.test.ts apps/sim/src/*.test.ts apps/metro/src/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

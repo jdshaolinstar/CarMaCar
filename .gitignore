@@ -26,3 +26,6 @@ spikes/vision/cache/
 spikes/vision/annotated/
 spikes/vision/frames/
 spikes/vision/result-*.json
+
+# Raw map downloads
+apps/metro/data/
