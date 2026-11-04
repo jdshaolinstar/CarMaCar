@@ -186,7 +186,7 @@ const HUMAN_START_DELAY = 0.9;
 const AUTOPILOT_START_DELAY = 0.15;
 const AUTOPILOT_FOLLOW_GAP = 5.6;
 const GARAGE_SPEED = 5;
-const GARAGE_LANE_OFFSET = 1.6;
+const GARAGE_LANE_OFFSET = 1.9;
 const GARAGE_MERGE_AHEAD = 8;
 export const LIFT_SECONDS = 1.6;
 const PAD_REACH = 5;
@@ -200,6 +200,9 @@ const AISLE_CLEARANCE = 13;
 const PULL_OUT_GAP = 26;
 const VIEW_CORRIDOR = 2.4;
 const MERGE_ROOM = 6.5;
+const GARAGE_PATIENCE_METERS = 150;
+const GARAGE_SEEK_METERS = 280;
+const GARAGE_EXTRA_WALK = 60;
 
 const MANUAL_ACCELERATION = 5;
 const MANUAL_BRAKING = 10;
@@ -621,8 +624,17 @@ export class World {
     const destination = car.destinationId ? this.city.destinations.find((d) => d.id === car.destinationId) : null;
     if (car.mode === 'cruise' && destination) {
       // A driver heads for the destination, then circles nearby looking for a space.
+      // Once fed up, they make for the nearest garage instead.
+      const fedUp = car.meters > GARAGE_SEEK_METERS;
+      const garage = [...this.city.garages].sort((a, b) => distance(a.door, car.pos) - distance(b.door, car.pos))[0];
+      if (fedUp && garage) {
+        // The door is only reachable from one direction, so aim for the start of that street.
+        const entry = options.find((e) => e.from === garage.entryFrom && e.to === garage.entryTo);
+        if (entry) return entry;
+      }
+      const aim = fedUp && garage ? this.graph.node(garage.entryFrom) : destination;
       const ranked = options
-        .map((e) => ({ e, d: distance(this.graph.node(e.to), destination) + this.rng() * 40 }))
+        .map((e) => ({ e, d: distance(this.graph.node(e.to), aim) + this.rng() * 40 }))
         .sort((a, b) => a.d - b.d);
       return ranked[0].e;
     }
@@ -873,6 +885,27 @@ export class World {
     }
   }
 
+  /**
+   * After a while a driver gives up on the street and pulls into a garage they are passing.
+   * They cannot see which levels have room, so they take the first space they find going up.
+   */
+  private considerGarage(car: Car, along: number, destination: Vec2, walkLimit: number) {
+    if (car.meters < GARAGE_PATIENCE_METERS) return;
+    for (const g of this.city.garages) {
+      if (g.entryFrom !== car.edge.from || g.entryTo !== car.edge.to) continue;
+      if (g.entryAlong < along + 7 || g.entryAlong > along + 26) continue;
+      if (distance(g, destination) > walkLimit + GARAGE_EXTRA_WALK) continue;
+      const stall = this.city.stalls.find((s) => s.garageId === g.id && !this.stallOwner.has(s.id));
+      if (!stall) continue;
+      car.targetStallId = stall.id;
+      car.path = this.graph.buildPath([car.edge], along, g.entryAlong);
+      car.s = 0;
+      car.endsAtStall = true;
+      car.queue = [];
+      return;
+    }
+  }
+
   /** Human drivers only know what they can see: a free stall just ahead on their right. */
   private spotStall(car: Car) {
     const destination = this.city.destinations.find((d) => d.id === car.destinationId);
@@ -896,7 +929,10 @@ export class World {
         best = stall;
       }
     }
-    if (!best) return;
+    if (!best) {
+      this.considerGarage(car, along, destination, walkLimit);
+      return;
+    }
     car.targetStallId = best.id;
     car.path = this.graph.buildPath([car.edge], along, bestAlong);
     car.s = 0;
@@ -1387,7 +1423,11 @@ export class World {
       // Priority over traffic behind, but never onto a spot already taken up ahead.
       if (car.merging) {
         const landing = path.sample(path.length).point;
-        const taken = this.activeCars.some((o) => o !== car && o.level === 0 && !o.insideGarage && distance(o.pos, landing) < MERGE_ROOM);
+        const laneDir = this.graph.edgeDir(car.edge);
+        // Only cars at or past the landing count. A car behind it is waiting for this one.
+        const taken = this.activeCars.some(
+          (o) => o !== car && o.level === 0 && !o.insideGarage && distance(o.pos, landing) < MERGE_ROOM && dot(sub(o.pos, landing), laneDir) > -1,
+        );
         if (taken) limit = Math.min(limit, brakingSpeed(path.length - car.s - 2));
       }
 

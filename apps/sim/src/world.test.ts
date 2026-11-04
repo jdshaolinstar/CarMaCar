@@ -323,6 +323,16 @@ test('good samaritans only go to litter the network has pinned, and earn karma',
   assert.equal(world.cleanupKarma, (10 - world.litter.size) * 10);
 });
 
+test('self-routed drivers use garages once they give up on the street', () => {
+  const world = new World(city, 29, null);
+  // Streets full, garages empty: the only way to park is a garage.
+  for (const stall of city.stalls) if (!stall.garageId) world.parkCarInStall(stall, 0, '#555555', true);
+  world.setDemand(World.makeDemand(city, 30, 15, 60, 0));
+  run(world, 400);
+  const inGarage = [...world.stallOwner.keys()].filter((id) => world.stalls.get(id)?.garageId).length;
+  assert.ok(inGarage >= 5, `only ${inGarage} used a garage`);
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };
