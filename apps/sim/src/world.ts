@@ -77,6 +77,8 @@ export interface DemandItem {
 }
 
 const CRUISE_SPEED = 11;
+const APPROACH_SPEED = 4.5;
+const APPROACH_DISTANCE = 30;
 const FOLLOW_GAP = 8.5;
 const PARK_SECONDS = 2.4;
 const PARKED_MIN_SECONDS = 90;
@@ -518,7 +520,10 @@ export class World {
       if (!path) continue;
 
       const gap = this.gapAhead(car);
-      const limit = gap < FOLLOW_GAP ? Math.max(0, (gap - 5.5) * 1.2) : CRUISE_SPEED;
+      // Drivers slow down when they near their spot, which also gives cameras time to look at it.
+      const nearingStall = car.endsAtStall && path.length - car.s < APPROACH_DISTANCE;
+      const cruise = nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
+      const limit = gap < FOLLOW_GAP ? Math.min(cruise, Math.max(0, (gap - 5.5) * 1.2)) : cruise;
       car.speed += Math.sign(limit - car.speed) * Math.min(Math.abs(limit - car.speed), 6 * dt);
       const step = car.speed * dt;
       car.s += step;

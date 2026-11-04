@@ -6,7 +6,7 @@ import { runOnce, type RunResult } from '../src/evaluate';
 const city = generateCity();
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
 const SHARES = [0, 0.25, 0.5, 0.75, 1];
-const OCCUPANCY = [0.75, 0.9];
+const OCCUPANCY = [0.75, 0.9, 0.95];
 const base = { drivers: 40, spanSeconds: 240, staleSeconds: 30, horizonSeconds: 700 };
 
 const output: unknown[] = [];
