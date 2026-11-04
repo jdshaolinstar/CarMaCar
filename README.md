@@ -111,8 +111,8 @@ What the study found:
 
 - **Knowing destinations helps most when demand is uneven.** Choosing a quieter exit was the strongest single feature at the stadium. In even rush hour the gain is small, though missed exits fall by 82%.
 - **Cameras matter when few cars share GPS.** At 30% participation in the stadium event, GPS alone made no difference. Adding ramp cameras cut trip time by 7%.
-- **A higher limit alone does little.** In the stadium event, going from 55 to 75 mph took trips from 172 s to 163 s without TES, and to 142 s with it, with mainline speed up from 31 to 44 mph. Hard braking rose about 70% either way, and TES did not offset that.
-- **Early lane moves can backfire.** With too much warning, exit traffic filled the right lane past other exits and blocked them. A warning of 380 m works; 800 m made the stadium event much worse.
+- **A higher limit alone does little.** In the stadium event, going from 55 to 75 mph took trips from 172 s to 163 s without TES, and to 142 s with it, with mainline speed up from 31 to 44 mph. Hard braking rose 82% without TES and 71% with it, so TES did not offset that.
+- **Early lane moves can backfire.** Alone, they made the stadium event worse, because exit traffic filled the right lane past other exits and blocked them. A warning of 800 m was far worse than 380 m. They help in even traffic, and at the stadium only when combined with exit choice.
 - **Smart ramp lights did not reduce total delay.** They moved delay onto cross streets, and at the stadium they made results worse, so they are off by default.
 - **Baseline timing matters.** A well-tuned fixed signal explained nearly all of an early apparent gain from smart lights, so every number here compares against the best fixed timing.
 
