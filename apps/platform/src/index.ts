@@ -5,6 +5,7 @@ import cors from '@fastify/cors';
 import {
   distance,
   generateCity,
+  type CameraPose,
   type FindParkingRequest,
   type FindParkingResponse,
   type FrameUpload,
@@ -16,6 +17,7 @@ import {
   type TesSettings,
   type TripPlan,
   type TripRequest,
+  type Vec2,
 } from '@carmacar/shared';
 import Fastify from 'fastify';
 import OpenAI from 'openai';
@@ -23,8 +25,9 @@ import { runTripAgent } from './agent';
 import { runOperator } from './operator';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
+import { SparkVision } from './vision/spark';
 import { analyzeFrame, isUsableFrame, locateTrash, trashSpotInView } from './vision/stalls';
-import type { VisionProvider } from './vision/provider';
+import type { VehicleMask, VisionProvider } from './vision/provider';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const AGENT_MODEL = process.env.AGENT_MODEL ?? 'muse-spark-1.3-contributor';
@@ -42,6 +45,7 @@ if (!process.env.MODEL_API_KEY) throw new Error('MODEL_API_KEY is not set.');
 
 const client = new OpenAI({ baseURL: 'https://api.meta.ai/v1', apiKey: process.env.MODEL_API_KEY });
 const vision: VisionProvider = new SamProvider(client);
+const spark = new SparkVision(client, AGENT_MODEL, (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN));
 const city = generateCity();
 const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
 const roadSegments = city.segments.map((s) => ({
@@ -112,25 +116,24 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
   const started = Date.now();
   try {
     // The frame lives only in this buffer and is gone when the request ends. It is never stored.
-    const masks = await vision.findVehicles(pixels);
-    const { observations, assignments, roadVehicles } = analyzeFrame(masks, pose, city.stalls, roadSegments);
+    const readBySpark = twin.parkingVision === 'spark';
+    const masks = readBySpark ? [] : await vision.findVehicles(pixels);
+    const analysis = analyzeFrame(masks, pose, city.stalls, roadSegments);
+    const observations = readBySpark ? await spark.readStalls(pixels, pose, city.stalls) : analysis.observations;
+    const { assignments, roadVehicles } = analysis;
     for (const [segmentId, count] of roadVehicles) {
       twin.tes.reportCameraCount(segmentId, count, Date.now() / 1000);
       twin.cameraTrafficCounts += count;
     }
     const changes = twin.observe(observations, Date.now());
-    // A second look for trash, only on frames the client marks, because it costs a second call.
-    const trashMasks = pose.scanTrash ? await vision.findConcept(pixels, TRASH_CONCEPT) : [];
-    if (pose.scanTrash) {
-      addSpend(SAM_USD_PER_FRAME);
-      twin.observeTrash(locateTrash(trashMasks, pose, city.sidewalkHeight), (p) => trashSpotInView(p, pose, city.sidewalkHeight));
-    }
+    // A second look for trash, only on frames the client marks. It does not hold up this frame.
+    if (pose.scanTrash) void scanTrash(twin, pixels, pose);
     twin.addFrame({
       frameId: randomUUID(),
       scoutId,
       capturedAt,
       latencyMs: Date.now() - started,
-      model: vision.model,
+      model: readBySpark ? spark.model : vision.model,
       detections: masks.map((m) => ({
         objectId: m.objectId,
         box: m.box,
@@ -140,7 +143,6 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
         stallId: assignments.get(m.objectId) ?? null,
       })),
       stalls: observations.map((o) => ({ id: o.stallId, state: o.state })),
-      trash: trashMasks.map((m) => m.box),
     });
     twin.karma.set(scoutId, (twin.karma.get(scoutId) ?? 0) + observations.length);
 
@@ -163,6 +165,40 @@ app.post<{ Params: { id: string }; Body: FrameUpload }>('/v1/sessions/:id/frames
     inflight.set(req.params.id, (inflight.get(req.params.id) ?? 1) - 1);
   }
 });
+
+// Trash can wait, and Spark takes seconds, so this runs alongside the frame rather than holding it up.
+async function scanTrash(twin: Twin, pixels: Buffer, pose: CameraPose) {
+  if (twin.trashScanBusy) return;
+  twin.trashScanBusy = true;
+  const y = city.sidewalkHeight;
+  const inView = (p: Vec2) => trashSpotInView(p, pose, y);
+  try {
+    let boxes: { box: [number, number, number, number]; category: string }[] = [];
+    if (twin.trashVision === 'spark') {
+      boxes = await spark.findTrash(pixels, pose);
+    } else {
+      addSpend(SAM_USD_PER_FRAME);
+      const masks = await vision.findConcept(pixels, TRASH_CONCEPT);
+      boxes = masks.map((m) => ({ box: m.box, category: 'garbage bag' }));
+      if (twin.trashVision === 'sam+spark') {
+        const checked = await Promise.all(boxes.map((b) => spark.checkTrash(pixels, b.box, pose.width, pose.height)));
+        boxes = boxes.map((b, i) => ({ ...b, category: checked[i] })).filter((b) => b.category !== 'not trash');
+      }
+    }
+    const sightings = boxes.flatMap((b) => {
+      const [point] = locateTrash([{ box: b.box } as VehicleMask], pose, y);
+      return point ? [{ ...point, category: b.category }] : [];
+    });
+    twin.observeTrash(sightings, inView);
+    const names = boxes.map((b) => b.category).join(', ');
+    twin.trashNote = `${twin.trashVision === 'sam' ? 'SAM 3.1' : twin.trashVision === 'spark' ? 'Muse Spark' : 'SAM 3.1 with a Muse Spark check'} found ${boxes.length ? names : 'no trash'} in the last scan.`;
+  } catch (err) {
+    twin.trashNote = 'The last trash scan failed.';
+    app.log.warn(err);
+  } finally {
+    twin.trashScanBusy = false;
+  }
+}
 
 function rerouteCar(twin: Twin, carId: string, takenStallId: string) {
   const trip = [...twin.trips.values()].find((t) => t.carId === carId && t.legs[0]?.stallId === takenStallId);
@@ -280,6 +316,9 @@ app.post<{ Params: { id: string }; Body: TesSettings }>('/v1/sessions/:id/tes', 
   if (!twin) return reply.code(404).send({ error: 'Unknown session' });
   twin.tesEnabled = req.body.enabled;
   twin.smartLights = req.body.smartLights;
+  twin.parkingVision = req.body.parkingVision;
+  twin.trashVision = req.body.trashVision;
+  twin.strategist = req.body.strategist;
   return { ok: true };
 });
 

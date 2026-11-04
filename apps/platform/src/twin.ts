@@ -1,6 +1,8 @@
 // One live parking map per visitor session. Its only input is what vision observed.
 import type {
   AgentEvent,
+  ParkingVision,
+  TrashVision,
   CityMap,
   FrameReport,
   Stall,
@@ -24,6 +26,7 @@ interface TrashPin {
   x: number;
   z: number;
   misses: number;
+  category: string;
 }
 
 const TRASH_MATCH_METRES = 3;
@@ -46,6 +49,11 @@ export class Twin {
   readonly tes: TrafficEngine;
   tesEnabled = true;
   smartLights = false;
+  parkingVision: ParkingVision = 'sam';
+  trashVision: TrashVision = 'spark';
+  strategist = false;
+  trashScanBusy = false;
+  trashNote: string | null = null;
   cameraTrafficCounts = 0;
   frameCount = 0;
   private readonly trash = new Map<string, TrashPin>();
@@ -142,7 +150,7 @@ export class Twin {
   }
 
   /** Updates trash pins from one scanned frame. A pin clears only after cameras see the spot empty twice. */
-  observeTrash(sightings: Vec2[], inView: (point: Vec2) => boolean) {
+  observeTrash(sightings: (Vec2 & { category?: string })[], inView: (point: Vec2) => boolean) {
     const matched = new Set<string>();
     for (const seen of sightings) {
       let hit: string | null = null;
@@ -154,7 +162,7 @@ export class Twin {
         this.trash.get(hit)!.misses = 0;
       } else {
         const id = `t${this.nextTrashId++}`;
-        this.trash.set(id, { x: seen.x, z: seen.z, misses: 0 });
+        this.trash.set(id, { x: seen.x, z: seen.z, misses: 0, category: seen.category ?? 'trash' });
         matched.add(id);
       }
     }
@@ -193,7 +201,8 @@ export class Twin {
       traffic: this.trafficLevels(),
       cameraTrafficCounts: this.cameraTrafficCounts,
       avoidedStreets: [...this.tes.streetPenalties.keys()],
-      trashPins: [...this.trash].map(([id, pin]) => ({ id, x: pin.x, z: pin.z })),
+      trashPins: [...this.trash].map(([id, pin]) => ({ id, x: pin.x, z: pin.z, category: pin.category })),
+      trashNote: this.trashNote,
     };
   }
 }

@@ -84,7 +84,9 @@ export interface TwinSnapshot {
   /** Streets an operator goal is steering cars away from. */
   avoidedStreets: string[];
   /** Trash cameras have seen and no camera has yet seen gone. */
-  trashPins: { id: string; x: number; z: number }[];
+  trashPins: { id: string; x: number; z: number; category: string }[];
+  /** The latest trash scan, in words, for the dashboard. */
+  trashNote: string | null;
 }
 
 export interface FindParkingRequest {
@@ -126,9 +128,16 @@ export interface RouteReply {
   chain: DirectedEdge[] | null;
 }
 
+export type ParkingVision = 'sam' | 'spark';
+export type TrashVision = 'spark' | 'sam' | 'sam+spark';
+
 export interface TesSettings {
   enabled: boolean;
   smartLights: boolean;
+  parkingVision: ParkingVision;
+  trashVision: TrashVision;
+  /** Muse Spark reviews the whole city on a regular cycle and steers TES. */
+  strategist: boolean;
 }
 
 export interface OperatorRequest {

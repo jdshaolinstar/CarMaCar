@@ -1,5 +1,5 @@
 // Wires the simulated city to the platform. Truth stays here; only pixels and pose are sent.
-import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
+import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { navigate } from './nav';
 import { PhoneApp } from './phone';
@@ -22,6 +22,9 @@ let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
 let trashScanOn = true;
+let parkingVision: ParkingVision = 'sam';
+let trashVision: TrashVision = 'spark';
+let strategistOn = false;
 /** Set by the stolen stall playbook: the next stall the trip agent reserves gets taken. */
 let stealNextPlannedStall = false;
 
@@ -214,7 +217,7 @@ function showLatestFrame() {
         : '';
       return `<path class="mask" transform="translate(${l} ${t}) scale(${sx} ${sy})" d="${d.maskPath}"/>${tag}`;
     })
-    .join('') + (report.trash ?? []).map(([l, t, r, b]) => `<rect class="trash" x="${l}" y="${t}" width="${r - l}" height="${b - t}"/>`).join('');
+    .join('');
   const vehicles = report.detections.length;
   $('frame-caption').textContent =
     `${report.model} found ${vehicles} ${vehicles === 1 ? 'vehicle' : 'vehicles'} in ${(report.latencyMs / 1000).toFixed(1)} s and read ${report.stalls.length} stalls. Photo deleted.`;
@@ -242,6 +245,7 @@ function updateStats() {
   $('stat-camera-cars').textContent = String(twin.cameraTrafficCounts);
   $('stat-trash').textContent = String(twin.trashPins.length);
   $('stat-clean').textContent = String(world.cleanupKarma);
+  $('trash-note').textContent = twin.trashNote ?? '';
   world.litterPins = twin.trashPins;
   const total = readings.right + readings.falseFree.length + readings.falseTaken.length;
   $('stat-readings').textContent = total ? `${((100 * readings.right) / total).toFixed(1)}%` : 'No data';
@@ -407,8 +411,39 @@ const systems: SystemDef[] = [
     name: 'Trash detection',
     description: 'Every third street photo also looks for trash and pins it on the map.',
     layer: 'production',
-    engine: 'Meta SAM 3.1',
+    engine: 'Meta Muse Spark or SAM 3.1, chosen below',
     control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'parkingVision',
+    name: 'Parking vision model',
+    description: 'What reads stalls. SAM is fast and repeatable. Spark reasons about the scene but takes seconds.',
+    layer: 'production',
+    engine: 'Your choice',
+    control: {
+      type: 'choice',
+      value: 'sam',
+      options: [
+        { value: 'sam', label: 'SAM 3.1' },
+        { value: 'spark', label: 'Muse Spark' },
+      ],
+    },
+  },
+  {
+    id: 'trashVision',
+    name: 'Trash vision model',
+    description: 'Spark found twice as much in testing and names the type. SAM is faster.',
+    layer: 'production',
+    engine: 'Your choice',
+    control: {
+      type: 'choice',
+      value: 'spark',
+      options: [
+        { value: 'spark', label: 'Muse Spark' },
+        { value: 'sam', label: 'SAM 3.1' },
+        { value: 'sam+spark', label: 'SAM + Spark check' },
+      ],
+    },
   },
   {
     id: 'photoRate',
@@ -518,7 +553,7 @@ const systems: SystemDef[] = [
 
 function syncTes() {
   world.signals.mode = !lightsOn ? 'off' : tesOn && smartLightsOn ? 'smart' : 'fixed';
-  platform?.setTes({ enabled: tesOn, smartLights: tesOn && smartLightsOn });
+  platform?.setTes({ enabled: tesOn, smartLights: tesOn && smartLightsOn, parkingVision, trashVision, strategist: tesOn && strategistOn });
 }
 
 async function sendTelemetry() {
@@ -537,6 +572,13 @@ function applySystem(id: string, value: boolean | number | string) {
     $('map-note').hidden = visionOn;
   } else if (id === 'garageCameras') garageVisionOn = value as boolean;
   else if (id === 'trash') trashScanOn = value as boolean;
+  else if (id === 'parkingVision') {
+    parkingVision = value as ParkingVision;
+    syncTes();
+  } else if (id === 'trashVision') {
+    trashVision = value as TrashVision;
+    syncTes();
+  }
   else if (id === 'litterers') world.litterEnabled = value as boolean;
   else if (id === 'samaritans') world.samaritansEnabled = value as boolean;
   else if (id === 'photoRate') framesPerSecond = value as number;
