@@ -219,6 +219,116 @@ async function fetchBinary(name: string) {
   return res.arrayBuffer();
 }
 
+interface LabScores {
+  meanMinutes: number;
+  rushMeanMinutes: number;
+  vehicleHours: number;
+}
+
+interface LabCandidate {
+  name: string;
+  idea: string;
+  code?: string;
+  params?: Record<string, number>;
+  verdict: 'tested' | 'rejected' | 'failed';
+  reason?: string;
+  scores?: LabScores;
+  gainPercent?: number;
+}
+
+interface LabSession {
+  mode: 'algorithm' | 'params';
+  model: string;
+  status: string;
+  simTest: { cars: number };
+  tokens: number;
+  estimatedCostUsd: number;
+  references: { apps?: LabScores; handTuned?: LabScores; rough?: LabScores };
+  rounds: { round: number; candidates: LabCandidate[] }[];
+  winner: LabCandidate | null;
+  heldOut: null | { winner: LabScores; handTuned: LabScores; apps: LabScores; gainPercent: number };
+  verdict: string;
+  lesson: string;
+}
+
+const LAB_MODES: { id: LabSession['mode']; label: string }[] = [
+  { id: 'algorithm', label: 'Muse writes algorithms' },
+  { id: 'params', label: 'Muse tunes settings' },
+];
+
+/** The recorded sessions. Sessions run offline, because a static page has no simulator behind it. */
+async function startLab() {
+  // Candidates differ by small amounts, so the Lab shows whole numbers instead of 1.0M.
+  const exact = (n: number) => Math.round(n).toLocaleString('en-US');
+  const sessions = new Map<string, LabSession>();
+  for (const mode of LAB_MODES) {
+    const res = await fetch(`${BASE}la-lab-${mode.id}.json`).catch(() => null);
+    if (res?.ok && res.headers.get('content-type')?.includes('json')) sessions.set(mode.id, (await res.json()) as LabSession);
+  }
+  if (sessions.size === 0) return;
+  const toggle = $('lab-on') as HTMLInputElement;
+  const modeSelect = $('lab-mode') as HTMLSelectElement;
+  for (const mode of LAB_MODES) if (sessions.has(mode.id)) modeSelect.append(new Option(mode.label, mode.id));
+
+  function showCode(candidate: LabCandidate) {
+    $('lab-code-name').textContent = candidate.name;
+    $('lab-code-idea').textContent = candidate.idea;
+    $('lab-code').textContent = candidate.code ?? JSON.stringify(candidate.params, null, 2);
+  }
+
+  function show() {
+    const session = sessions.get(modeSelect.value)!;
+    $('lab-status').textContent = `${session.status}. ${session.tokens.toLocaleString('en-US')} tokens, about $${session.estimatedCostUsd.toFixed(3)}`;
+    $('lab-verdict').textContent = session.verdict;
+    $('lab-lesson').textContent = session.lesson;
+    const rows = $('lab-rows');
+    rows.replaceChildren();
+    const select = (row: HTMLTableRowElement, candidate: LabCandidate) => {
+      for (const other of rows.children) other.removeAttribute('aria-selected');
+      row.setAttribute('aria-selected', 'true');
+      showCode(candidate);
+    };
+    const start = session.winner ?? session.rounds[0]?.candidates[0];
+    for (const { round, candidates } of session.rounds) {
+      for (const candidate of candidates) {
+        const row = document.createElement('tr');
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.textContent = candidate.name;
+        pick.addEventListener('click', () => select(row, candidate));
+        const nameCell = document.createElement('td');
+        nameCell.append(pick);
+        const cell = (text: string) => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          return td;
+        };
+        const gain = candidate.gainPercent;
+        const compared = gain === undefined ? 'None' : `${Math.abs(gain).toFixed(2)}% ${gain >= 0 ? 'better' : 'worse'}`;
+        const result = candidate.verdict === 'tested' ? (candidate.scores ? (candidate.name === session.winner?.name ? 'Best in SimTest' : 'Tested') : 'Testing') : candidate.verdict === 'rejected' ? 'Rejected by the safety check' : 'Failed';
+        row.append(cell(String(round)), nameCell, cell(candidate.scores ? exact(candidate.scores.vehicleHours) : 'None'), cell(compared), cell(result));
+        rows.append(row);
+        if (candidate.name === start?.name) select(row, candidate);
+      }
+    }
+    const held = session.heldOut;
+    const foot = [
+      `SimTest used ${session.simTest.cars.toLocaleString('en-US')} cars, so its percentages only compare candidates with each other.`,
+      held ? `On commuters it never saw: ${exact(held.apps.vehicleHours)} vehicle-hours with today's apps, ${exact(held.handTuned.vehicleHours)} with hand-tuned TES, ${exact(held.winner.vehicleHours)} with the Lab winner.` : '',
+      session.mode === 'params' && session.references.rough && session.references.handTuned ? `Rough start ${exact(session.references.rough.vehicleHours)}, hand-tuned ${exact(session.references.handTuned.vehicleHours)} vehicle-hours in SimTest. Muse never saw the hand-tuned values.` : '',
+      `Written by ${session.model}. Recorded session: this page replays it and does not run a model.`,
+    ];
+    $('lab-foot').textContent = foot.filter(Boolean).join(' ');
+  }
+
+  toggle.addEventListener('change', () => {
+    ($('lab-body') as HTMLElement).hidden = !toggle.checked;
+  });
+  modeSelect.addEventListener('change', show);
+  show();
+  $('lab').hidden = false;
+}
+
 async function main() {
   const summaryRes = await fetch(`${BASE}la-summary.json`);
   if (!summaryRes.ok) throw new Error('The study data is missing. Run apps/metro/scripts/study.ts first.');
@@ -471,6 +581,8 @@ async function main() {
   requestAnimationFrame(render);
 }
 
-main().catch((err) => {
-  $('scale').textContent = (err as Error).message;
-});
+main()
+  .then(startLab)
+  .catch((err) => {
+    $('scale').textContent = (err as Error).message;
+  });

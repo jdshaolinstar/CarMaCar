@@ -49,6 +49,31 @@
       <li><i style="--c: #4088f2"></i>Parking lot</li>
       <li><i style="--c: #b873f2"></i>Garage</li>
     </ul>
+    <section class="lab" id="lab" aria-label="Muse Lab" hidden>
+      <header class="lab-head">
+        <h2>Muse Lab</h2>
+        <label class="check"><input id="lab-on" type="checkbox" />Show the Lab</label>
+        <label>Mode <select id="lab-mode" aria-label="Lab mode"></select></label>
+        <p class="lab-status" id="lab-status"></p>
+      </header>
+      <div id="lab-body" hidden>
+        <p class="lab-verdict" id="lab-verdict"></p>
+        <p class="lab-lesson" id="lab-lesson"></p>
+        <div class="lab-grid">
+          <table>
+            <caption>Every candidate, scored in SimTest against the hand-tuned system</caption>
+            <thead><tr><th scope="col">Round</th><th scope="col">Candidate</th><th scope="col">Vehicle-hours</th><th scope="col">Against hand-tuned</th><th scope="col">Result</th></tr></thead>
+            <tbody id="lab-rows"></tbody>
+          </table>
+          <div class="lab-code">
+            <h3 id="lab-code-name">Algorithm</h3>
+            <p id="lab-code-idea"></p>
+            <pre><code id="lab-code"></code></pre>
+          </div>
+        </div>
+        <p class="lab-foot" id="lab-foot"></p>
+      </div>
+    </section>
     <section class="muse" id="muse" aria-label="Summary written by Muse Spark" hidden>
       <h2 id="muse-headline"></h2>
       <ul id="muse-findings"></ul>
