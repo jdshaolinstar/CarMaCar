@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { highwayLayout, MPH, type HighwayTesOptions } from '@carmacar/shared';
 import { HighwaySim, makeHighwayDemand, type HighwayConfig, type HighwayMix, type HighwayResult } from '../src/highway';
 
-const layout = { ...highwayLayout(), baseRampGreen: Number(process.env.GREEN ?? 24) };
+const layout = { ...highwayLayout(), baseRampGreen: Number(process.env.GREEN ?? 28) };
 const SEEDS = (process.argv[2] ?? '1,2,3,4').split(',').map(Number);
 const SPAN = 1500;
 const HORIZON = 2700;
@@ -16,6 +16,7 @@ const SCENARIOS = [
 const LIMITS = [55, 65, 75];
 
 const everything: HighwayTesOptions = { cameras: true, prepare: true, keepLeft: true, rebalance: true, smartSignals: true, harmonize: false };
+const noLights: HighwayTesOptions = { ...everything, smartSignals: false };
 const none: HighwayTesOptions = { cameras: false, prepare: false, keepLeft: false, rebalance: false, smartSignals: false, harmonize: false };
 const auto = { guidedShare: 0, autopilotShare: 1 };
 const LEVERS: { name: string; tes: HighwayTesOptions | null; mix: HighwayMix }[] = [
@@ -31,10 +32,11 @@ const LEVERS: { name: string; tes: HighwayTesOptions | null; mix: HighwayMix }[]
 ];
 const FULL: { name: string; tes: HighwayTesOptions | null; mix: HighwayMix }[] = [
   { name: 'TES off', tes: null, mix: { guidedShare: 0, autopilotShare: 0 } },
-  { name: '30% guided, GPS only', tes: { ...everything, cameras: false }, mix: { guidedShare: 0.3, autopilotShare: 0 } },
-  { name: '30% guided, plus cameras', tes: everything, mix: { guidedShare: 0.3, autopilotShare: 0 } },
-  { name: '60% guided, plus cameras', tes: everything, mix: { guidedShare: 0.6, autopilotShare: 0 } },
-  { name: '100% autopilot', tes: everything, mix: { guidedShare: 0, autopilotShare: 1 } },
+  { name: '30% guided, GPS only', tes: { ...noLights, cameras: false }, mix: { guidedShare: 0.3, autopilotShare: 0 } },
+  { name: '30% guided, plus cameras', tes: noLights, mix: { guidedShare: 0.3, autopilotShare: 0 } },
+  { name: '60% guided, plus cameras', tes: noLights, mix: { guidedShare: 0.6, autopilotShare: 0 } },
+  { name: '100% autopilot', tes: noLights, mix: { guidedShare: 0, autopilotShare: 1 } },
+  { name: '100% autopilot, smart lights', tes: everything, mix: { guidedShare: 0, autopilotShare: 1 } },
 ];
 
 const output: unknown[] = [];
@@ -81,7 +83,7 @@ for (const scenario of SCENARIOS) {
       };
       output.push(row);
       console.log(
-        `${String(mph).padStart(5)}  ${mode.name.padEnd(26)} ${row.finished.toFixed(0).padStart(5)}/${row.trips.toFixed(0)}  ${row.seconds.toFixed(0).padStart(6)}  ${row.mph.toFixed(0).padStart(3)}  ${(row.slow * 100).toFixed(0).padStart(5)}  ${row.missed.toFixed(0).padStart(6)}  ${row.spill.toFixed(0).padStart(8)}  ${row.hard.toFixed(0).padStart(7)}  ${row.cross.toFixed(0).padStart(7)} ${row.crossLeft.toFixed(0).padStart(4)}  ${row.systemHours.toFixed(0).padStart(5)}  ${row.overlaps.toFixed(0).padStart(8)}`,
+        `${String(mph).padStart(5)}  ${mode.name.padEnd(30)} ${row.finished.toFixed(0).padStart(5)}/${row.trips.toFixed(0)}  ${row.seconds.toFixed(0).padStart(6)}  ${row.mph.toFixed(0).padStart(3)}  ${(row.slow * 100).toFixed(0).padStart(5)}  ${row.missed.toFixed(0).padStart(6)}  ${row.spill.toFixed(0).padStart(8)}  ${row.hard.toFixed(0).padStart(7)}  ${row.cross.toFixed(0).padStart(7)} ${row.crossLeft.toFixed(0).padStart(4)}  ${row.systemHours.toFixed(0).padStart(5)}  ${row.overlaps.toFixed(0).padStart(8)}`,
       );
     }
   }

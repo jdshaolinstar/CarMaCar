@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { distance, generateCity, pinhole, RoadGraph } from '../src/index';
+import { distance, generateCity, highwayLayout, HighwayShape, pinhole, RoadGraph } from '../src/index';
 
 const city = generateCity();
 const graph = new RoadGraph(city);
@@ -64,5 +64,35 @@ test('camera projection and ground back-projection are inverses', () => {
     const px = cam.project([p.x, 0, p.z])!;
     const back = cam.toGround(px[0], px[1])!;
     assert.ok(distance(p, back) < 1e-6);
+  }
+});
+
+test('the highway ring closes, stays outside the town, and turns right toward it', () => {
+  const layout = highwayLayout();
+  const shape = new HighwayShape(layout);
+  const town = generateCity().bounds;
+  let previous = shape.at(0);
+  for (let s = 1; s <= layout.length; s += 1) {
+    const p = shape.at(s);
+    assert.ok(Math.hypot(p.x - previous.x, p.z - previous.z) < 1.5, `jump at ${s}`);
+    assert.ok(p.x > town.maxX || p.x < town.minX || p.z > town.maxZ || p.z < town.minZ, `inside town at ${s}`);
+    const inward = shape.at(s, 10);
+    assert.ok(Math.hypot(inward.x, inward.z) < Math.hypot(p.x, p.z), `right is not toward town at ${s}`);
+    previous = p;
+  }
+  const end = shape.at(layout.length - 0.01);
+  const start = shape.at(0);
+  assert.ok(Math.hypot(end.x - start.x, end.z - start.z) < 0.1);
+});
+
+test('ramps end near their junction', () => {
+  const layout = highwayLayout();
+  const shape = new HighwayShape(layout);
+  const town = generateCity().bounds;
+  for (const ic of layout.interchanges) {
+    const s = shape.interchange(ic, town);
+    const end = s.offRamp[s.offRamp.length - 1];
+    assert.ok(Math.hypot(end.x - s.junction.x, end.z - s.junction.z) < 12);
+    assert.ok(Math.hypot(s.onRamp[0].x - s.junction.x, s.onRamp[0].z - s.junction.z) < 12);
   }
 });

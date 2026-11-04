@@ -44,9 +44,9 @@ export function highwayLayout(length = 2200): HighwayLayout {
     mergeLength: 160,
     rampSpeed: 16,
     cycleSeconds: 60,
-    baseRampGreen: 24,
-    minRampGreen: 14,
-    maxRampGreen: 40,
+    baseRampGreen: 28,
+    minRampGreen: 22,
+    maxRampGreen: 34,
     allRedSeconds: 3,
     rampStorage: Math.floor(rampLength / CAR_SPACE),
     saturationFlow: 0.5,
@@ -196,8 +196,8 @@ export class HighwayTes {
   private chooseGreen(queue: number, arriving: number, crossQueue: number) {
     const { baseRampGreen, minRampGreen, maxRampGreen } = this.layout;
     if (!this.options.smartSignals) return baseRampGreen;
-    const ramp = queue + arriving * 0.5;
-    const pressure = (ramp + 1) / (ramp + crossQueue + 2);
+    // Standing cars against standing cars, so the ramp gets no credit the cross street can't also earn.
+    const pressure = (queue + 1) / (queue + crossQueue + 2);
     return Math.round(Math.min(maxRampGreen, Math.max(minRampGreen, baseRampGreen * 2 * pressure)));
   }
 
@@ -259,4 +259,163 @@ export class HighwayTes {
     void length;
     return advice;
   }
+}
+
+// Where the ring sits in the world. The simulation only uses distances; this is for drawing it and
+// aiming cameras at it.
+
+export interface RoadPoint {
+  x: number;
+  z: number;
+  /** Direction of travel. */
+  tx: number;
+  tz: number;
+}
+
+export const LANE_WIDTH = 3.7;
+export const DECK_HEIGHT = 7;
+const CORNER_RADIUS = 90;
+const HALF_WIDTH = 330;
+const RAMP_REACH = 95;
+
+export interface InterchangeShape {
+  offRamp: RoadPoint[];
+  onRamp: RoadPoint[];
+  /** The junction where both ramps meet the street to town. */
+  junction: { x: number; z: number };
+  /** Where that street reaches the town. */
+  townEnd: { x: number; z: number };
+}
+
+function bezier(p0: number[], p1: number[], p2: number[], p3: number[], steps: number): RoadPoint[] {
+  const points: RoadPoint[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const u = 1 - t;
+    const at = (k: number) => u * u * u * p0[k] + 3 * u * u * t * p1[k] + 3 * u * t * t * p2[k] + t * t * t * p3[k];
+    const slope = (k: number) => 3 * u * u * (p1[k] - p0[k]) + 6 * u * t * (p2[k] - p1[k]) + 3 * t * t * (p3[k] - p2[k]);
+    const dx = slope(0);
+    const dz = slope(1);
+    const size = Math.hypot(dx, dz) || 1;
+    points.push({ x: at(0), z: at(1), tx: dx / size, tz: dz / size });
+  }
+  return points;
+}
+
+export class HighwayShape {
+  private readonly halfDepth: number;
+  private readonly legs: { length: number; arc: boolean; side: number }[];
+
+  constructor(readonly layout: HighwayLayout) {
+    const r = CORNER_RADIUS;
+    // The ring's length is fixed by the layout, so its depth follows from its width.
+    this.halfDepth = (layout.length - 2 * Math.PI * r) / 4 + 2 * r - HALF_WIDTH;
+    const wide = 2 * (HALF_WIDTH - r);
+    const deep = 2 * (this.halfDepth - r);
+    const arc = (Math.PI / 2) * r;
+    this.legs = [wide, deep, wide, deep].flatMap((length, side) => [
+      { length, arc: false, side },
+      { length: arc, arc: true, side },
+    ]);
+  }
+
+  /** A point on the ring. `right` moves toward the driver's right, which is always toward the town. */
+  at(s: number, right = 0): RoadPoint {
+    const r = CORNER_RADIUS;
+    const w = HALF_WIDTH - r;
+    const d = this.halfDepth - r;
+    // Clockwise seen from above: along the +z side heading +x, down the +x side heading -z, and so on.
+    const headings = [
+      { x: 1, z: 0 },
+      { x: 0, z: -1 },
+      { x: -1, z: 0 },
+      { x: 0, z: 1 },
+    ];
+    const starts = [
+      { x: -w, z: d + r },
+      { x: w + r, z: d },
+      { x: w, z: -d - r },
+      { x: -w - r, z: -d },
+    ];
+    let left = ((s % this.layout.length) + this.layout.length) % this.layout.length;
+    for (const leg of this.legs) {
+      if (left > leg.length) {
+        left -= leg.length;
+        continue;
+      }
+      const dir = headings[leg.side];
+      const start = starts[leg.side];
+      const inward = { x: dir.z, z: -dir.x };
+      if (!leg.arc) {
+        return { x: start.x + dir.x * left + inward.x * right, z: start.z + dir.z * left + inward.z * right, tx: dir.x, tz: dir.z };
+      }
+      const straight = leg.side % 2 === 0 ? 2 * w : 2 * d;
+      const center = { x: start.x + dir.x * straight + inward.x * r, z: start.z + dir.z * straight + inward.z * r };
+      const angle = left / r;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const radial = { x: -inward.x * cos + dir.x * sin, z: -inward.z * cos + dir.z * sin };
+      const tangent = { x: dir.x * cos + inward.x * sin, z: dir.z * cos + inward.z * sin };
+      return { x: center.x + radial.x * (r - right), z: center.z + radial.z * (r - right), tx: tangent.x, tz: tangent.z };
+    }
+    return this.at(0, right);
+  }
+
+  /** Centre of a lane. Lane 0 is the right lane, the one next to the exits. */
+  lane(s: number, lane: number) {
+    return this.at(s, (1 - lane) * LANE_WIDTH);
+  }
+
+  interchange(ic: Interchange, town: { minX: number; maxX: number; minZ: number; maxZ: number }): InterchangeShape {
+    const leave = this.lane(ic.offAt, 0);
+    const mid = this.at(ic.offAt + 60, LANE_WIDTH);
+    const along = { x: mid.tx, z: mid.tz };
+    const inward = { x: mid.tz, z: -mid.tx };
+    const junction = { x: mid.x + inward.x * RAMP_REACH, z: mid.z + inward.z * RAMP_REACH };
+    const offEnd = [junction.x - along.x * 9 - inward.x * 3, junction.z - along.z * 9 - inward.z * 3];
+    const offRamp = bezier(
+      [leave.x, leave.z],
+      [leave.x + leave.tx * 55, leave.z + leave.tz * 55],
+      [offEnd[0] - inward.x * 45, offEnd[1] - inward.z * 45],
+      offEnd,
+      28,
+    );
+    const onStart = [junction.x + along.x * 9 - inward.x * 3, junction.z + along.z * 9 - inward.z * 3];
+    const join = this.at(ic.onAt, LANE_WIDTH * 2);
+    const onRamp = bezier(
+      onStart,
+      [onStart[0] - inward.x * 45, onStart[1] - inward.z * 45],
+      [join.x - join.tx * 55, join.z - join.tz * 55],
+      [join.x, join.z],
+      28,
+    );
+    for (let m = 8; m <= this.layout.mergeLength; m += 8) onRamp.push(this.at(ic.onAt + m, LANE_WIDTH * 2));
+    const townEnd = {
+      x: Math.min(town.maxX, Math.max(town.minX, junction.x)),
+      z: Math.min(town.maxZ, Math.max(town.minZ, junction.z)),
+    };
+    return { offRamp, onRamp, junction, townEnd };
+  }
+}
+
+/** Walks `distance` metres along a polyline. */
+export function alongPolyline(points: RoadPoint[], distance: number): RoadPoint {
+  let left = Math.max(0, distance);
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const size = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    if (left <= size || i === points.length - 1) {
+      const t = Math.min(1, left / size);
+      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, tx: (b.x - a.x) / size, tz: (b.z - a.z) / size };
+    }
+    left -= size;
+  }
+  return points[0];
+}
+
+export function polylineLength(points: { x: number; z: number }[]) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z);
+  return total;
 }
