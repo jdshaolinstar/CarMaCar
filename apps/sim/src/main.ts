@@ -21,6 +21,7 @@ const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
+const RECENT_DRIVERS = 20;
 const RESIDENT_REST_MS = 45_000;
 let trashScanOn = true;
 let parkingVision: ParkingVision = 'sam';
@@ -253,6 +254,8 @@ function updateStats() {
   $('stat-seen').textContent = `${seen} of ${city.stalls.length}`;
   $('stat-accuracy').textContent = seen ? `${Math.round((100 * matches) / seen)}%` : 'No data';
   $('stat-frames').textContent = String(twin.usage.frames);
+  const recent = world.parkedLog.filter((r) => r.role === 'network' || r.role === 'manual').slice(-RECENT_DRIVERS);
+  if (recent.length) $('stat-park-time').textContent = `${Math.round(recent.reduce((t, r) => t + r.seconds, 0) / recent.length)} s`;
   $('stat-gps').textContent = String([...world.cars.values()].filter((c) => c.sharesGps && c.phase === 'drive').length);
   $('stat-camera-cars').textContent = String(twin.cameraTrafficCounts);
   $('stat-trash').textContent = String(twin.trashPins.length);
