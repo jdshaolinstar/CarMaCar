@@ -123,6 +123,10 @@ Open http://127.0.0.1:5173. It sends about one photo per second, which costs rea
 | `AGENT_MODEL` | Model for agents. Default `muse-spark-1.3-contributor`. |
 | `VITE_API_URL` | Where the sim finds the platform, when hosted. |
 
+## Using another city
+
+The town is plain data and the 3D layer is one file, so this runs in other environments. See [docs/PORTING.md](docs/PORTING.md).
+
 ## Built during the hackathon
 
 Everything in this repo was built during the event, between November 3 and 4, 2026. The commit history shows the order. It uses no earlier code.

@@ -1,5 +1,5 @@
 // Wires the simulated city to the platform. Truth stays here; only pixels and pose are sent.
-import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
+import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type CityMap, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { navigate } from './nav';
 import { PhoneApp } from './phone';
@@ -48,7 +48,9 @@ function showStatus(text: string | null) {
   statusEl.textContent = text ?? '';
 }
 
-const city = generateCity();
+// The demo town by default, or any city described in a file. See docs/PORTING.md.
+const cityFile = params.get('city');
+const city: CityMap = cityFile ? await (await fetch(cityFile)).json() : generateCity();
 const platform = await PlatformClient.connect().catch((err: Error) => {
   showStatus(`Can't reach the platform. Start it, then reload. (${err.message})`);
   return null;

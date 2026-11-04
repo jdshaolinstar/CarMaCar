@@ -1,11 +1,13 @@
 // CarMaCar platform. Receives pixels and pose, keeps a live parking map, runs trip agents.
 // It imports nothing from the sim. Its only contact with the sim is this HTTP API.
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import cors from '@fastify/cors';
 import {
   distance,
   generateCity,
   type CameraPose,
+  type CityMap,
   type FindParkingRequest,
   type FindParkingResponse,
   type FrameUpload,
@@ -48,7 +50,8 @@ if (!process.env.MODEL_API_KEY) throw new Error('MODEL_API_KEY is not set.');
 const client = new OpenAI({ baseURL: 'https://api.meta.ai/v1', apiKey: process.env.MODEL_API_KEY });
 const vision: VisionProvider = new SamProvider(client);
 const spark = new SparkVision(client, AGENT_MODEL, (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN));
-const city = generateCity();
+// The demo town by default, or any city described in a file. See docs/PORTING.md.
+const city: CityMap = process.env.CITY_FILE ? JSON.parse(readFileSync(process.env.CITY_FILE, 'utf8')) : generateCity();
 const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
 const roadSegments = city.segments.map((s) => ({
   id: s.id,
