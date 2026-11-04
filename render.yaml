@@ -1,0 +1,30 @@
+# Optional one-file deploy for Render. Other hosts work the same way: one static site, one Node service.
+# Set VITE_API_URL to the platform's URL, and ALLOWED_ORIGIN to the site's URL.
+services:
+  - type: web
+    name: carmacar-platform
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm start -w apps/platform
+    healthCheckPath: /health
+    envVars:
+      - key: MODEL_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: DAILY_BUDGET_USD
+        value: 15
+      - key: NODE_VERSION
+        value: 22.12.0
+
+  - type: web
+    name: carmacar-sim
+    runtime: static
+    buildCommand: npm ci && npm run build -w apps/sim
+    staticPublishPath: apps/sim/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: NODE_VERSION
+        value: 22.12.0

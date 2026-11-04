@@ -199,7 +199,7 @@ function scoreReadings() {
       if ((state === 'occupied') === occupied) readings.right++;
       else if (state === 'free') {
         readings.falseFree.push(id);
-        readings.misses.push({ id, report, image: frameImages.get(key) ?? '' });
+        if (readings.misses.length < 3) readings.misses.push({ id, report, image: frameImages.get(key) ?? '' });
       }
       else readings.falseTaken.push(id);
     }
