@@ -1,7 +1,7 @@
 {
  "mode": "params",
  "model": "muse-spark-1.3-contributor",
- "status": "Round 1 of 2: SimTest is scoring 3 candidates",
+ "status": "Held-out test: Early Preemptive Spread on commuters it never saw",
  "simTest": {
   "cars": 20000,
   "capacity": 2,
@@ -10,9 +10,9 @@
   "trainSeed": 11,
   "heldOutSeed": 12
  },
- "tokens": 8278,
+ "tokens": 17874,
  "tokenBudget": 100000,
- "estimatedCostUsd": 0.0015398999999999999,
+ "estimatedCostUsd": 0.0032929999999999995,
  "references": {
   "apps": {
    "meanMinutes": 30.81535411519434,
@@ -55,7 +55,17 @@
       "coordination": 0.5,
       "slices": 4
      },
-     "verdict": "tested"
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.743126607001244,
+      "rushMeanMinutes": 31.782902717332068,
+      "vehicleHours": 993751.624214725,
+      "delayHours": 233659.2945351143,
+      "vehicleKm": 50456243.016267836,
+      "finishedShare": 0.9941854318638333,
+      "seconds": 1173
+     },
+     "gainPercent": 1.475138359743581
     },
     {
      "name": "Protect Ramps Spread",
@@ -66,7 +76,17 @@
       "coordination": 0.5,
       "slices": 4
      },
-     "verdict": "tested"
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.48541437526431,
+      "rushMeanMinutes": 31.418413118880355,
+      "vehicleHours": 984007.345392693,
+      "delayHours": 225649.5543666451,
+      "vehicleKm": 50499808.65986742,
+      "finishedShare": 0.9949783275187652,
+      "seconds": 1162
+     },
+     "gainPercent": 2.441228577189448
     },
     {
      "name": "Staggered Peak Spreading",
@@ -77,12 +97,110 @@
       "coordination": 0.3,
       "slices": 4
      },
-     "verdict": "tested"
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 30.479391892267465,
+      "rushMeanMinutes": 32.87198713919968,
+      "vehicleHours": 1019502.4892788384,
+      "delayHours": 259332.47126384848,
+      "vehicleKm": 50537990.407930546,
+      "finishedShare": 0.9943968707051485,
+      "seconds": 1177
+     },
+     "gainPercent": -1.0779144914288978
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "candidates": [
+    {
+     "name": "Early Preemptive Spread",
+     "idea": "Raise planned-load penalty with staged batches to divert routes before links saturate.",
+     "params": {
+      "alpha": 0.7,
+      "power": 3,
+      "coordination": 0.75,
+      "slices": 6
+     },
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.169549414204013,
+      "rushMeanMinutes": 31.128466940844262,
+      "vehicleHours": 972091.0356348545,
+      "delayHours": 215469.00707720843,
+      "vehicleKm": 50467080.862675965,
+      "finishedShare": 0.9950840469394228,
+      "seconds": 1467
+     },
+     "gainPercent": 3.622663396057016
+    },
+    {
+     "name": "Freeway Ramp Split",
+     "idea": "Testing steeper convexity with stronger alpha to hold through-traffic on high-capacity freeways while pushing early off saturated ramps and surface streets.",
+     "params": {
+      "alpha": 0.6,
+      "power": 6,
+      "coordination": 0.5,
+      "slices": 6
+     },
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.967142535393883,
+      "rushMeanMinutes": 32.23030837770939,
+      "vehicleHours": 1002163.2153775425,
+      "delayHours": 242411.68010708046,
+      "vehicleKm": 50494009.54079913,
+      "finishedShare": 0.9943968707051485,
+      "seconds": 1477
+     },
+     "gainPercent": 0.6411765977732373
+    },
+    {
+     "name": "Peak Hold Timing",
+     "idea": "Testing sharper near-capacity penalty with deeper staggering to save through-capacity as peak builds and release it as peak clears.",
+     "params": {
+      "alpha": 0.5,
+      "power": 6,
+      "coordination": 0.6,
+      "slices": 6
+     },
+     "verdict": "tested",
+     "scores": {
+      "meanMinutes": 29.968109868093,
+      "rushMeanMinutes": 32.20046137722584,
+      "vehicleHours": 1002266.7167238658,
+      "delayHours": 243497.75064573638,
+      "vehicleKm": 50527778.77532337,
+      "finishedShare": 0.99476688867745,
+      "seconds": 1484
+     },
+     "gainPercent": 0.630915023776676
     }
    ]
   }
  ],
- "winner": null,
+ "winner": {
+  "name": "Early Preemptive Spread",
+  "idea": "Raise planned-load penalty with staged batches to divert routes before links saturate.",
+  "params": {
+   "alpha": 0.7,
+   "power": 3,
+   "coordination": 0.75,
+   "slices": 6
+  },
+  "verdict": "tested",
+  "scores": {
+   "meanMinutes": 29.169549414204013,
+   "rushMeanMinutes": 31.128466940844262,
+   "vehicleHours": 972091.0356348545,
+   "delayHours": 215469.00707720843,
+   "vehicleKm": 50467080.862675965,
+   "finishedShare": 0.9950840469394228,
+   "seconds": 1467
+  },
+  "gainPercent": 3.622663396057016
+ },
  "heldOut": null,
  "verdict": "",
  "lesson": ""

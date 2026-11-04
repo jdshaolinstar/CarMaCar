@@ -434,7 +434,7 @@ async function main() {
     const hours = baseline.vehicleHours - active.vehicleHours;
     const fuel = baseline.fuelLitres - active.fuelLitres;
     const items: [string, string][] = [
-      [`${baseline.rushMeanMinutes.toFixed(0)} to ${active.rushMeanMinutes.toFixed(0)} min`, 'Average rush-hour trip'],
+      [`${baseline.rushMeanMinutes.toFixed(1)} to ${active.rushMeanMinutes.toFixed(1)} min`, 'Average rush-hour trip'],
       [big(Math.abs(hours)), hours >= 0 ? 'Vehicle-hours saved this morning' : 'Extra vehicle-hours this morning'],
       [`${big(Math.abs(fuel))} L`, fuel >= 0 ? 'Fuel saved, estimated' : 'Extra fuel, estimated'],
       [`${big(baseline.delayHours)} to ${big(active.delayHours)}`, 'Hours of delay'],

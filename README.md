@@ -121,6 +121,38 @@ With human drivers set to move over 60% earlier, the stadium gain held at 17% an
 
 **Ramp counts, on rendered frames.** SAM counted 319 of 342 cars across 74 ramp frames, about 0.75 s per frame, with 66 frames within one car of the true count. Modeled ramp cameras in the study use that 93% rate.
 
+## Los Angeles study
+
+The 3D city proves the pipeline. This study asks whether the idea holds at city scale. Open **Los Angeles study** in the toolbar, or the Playbook of the same name.
+
+It simulates one morning commute on Los Angeles's real road network: about 214,000 road segments from OpenStreetMap and 2.4 million drivers modeled from US Census commute data. It is a 2D, queue-based model with no cameras, and runs were computed offline, so the page replays recorded results. Road capacity is calibrated at full size so today's apps average 30.3 minutes, against the Census figure of 30.8.
+
+| 190,648 simulated cars, one seed | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
+|---|---|---|---|---|
+| Today's apps, routing on live traffic | 30.3 min | 32.5 min | 1,019,442 | 231,914 |
+| 30% on hand-tuned TES | 30.9 min | 33.4 min | 1,041,858 | 252,038 |
+| 60% on hand-tuned TES | 30.2 min | 32.3 min | 1,014,973 | 225,275 |
+| Everyone on hand-tuned TES | 28.3 min | 29.6 min | 944,271 | 164,939 |
+| **60% on Muse's algorithm** | **28.4 min** | **29.6 min** | **947,528** | **166,725** |
+
+Hand-tuned TES only helps once everyone is on it, and at 30% it made things worse. Muse's algorithm reached the same result with 60% of drivers: 7.1% fewer vehicle-hours and 28.1% less delay than today's apps, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
+
+This is modeled, and not a forecast. It covers home-to-work commutes only, with assumed drive share, departure times and parking share. Small residential streets are absent, and drivers do not reroute mid-trip.
+
+### The Muse Lab
+
+Muse Spark does the traffic research. It writes routing algorithms, a simulator called SimTest scores them on a smaller Los Angeles, and Muse sees the scores and writes a better round. The best one must then repeat on commuters it never saw.
+
+Three Muse calls run at once per round, and Muse works between rounds, never per car. The full session, 6 candidates over 2 rounds, took 60,465 tokens, about 1.1 cents at contributor prices.
+
+Generated code runs in a tiny allowed language of road data, math, `if` and `return`. Loops, strings, globals and other calls cannot be written, and tests confirm 14 escape attempts are rejected. Each test runs in a separate process that does not have the API key. Production would add real isolation.
+
+An earlier test had Muse steer the routing system directly, with no measurable gain. Writing the algorithm is what worked. SimTest also understated this result: 3.36% against hand-tuned on held-out commuters at 20,000 cars, and far more at full size. That gap is not yet explained, so treat SimTest as a filter and not a forecast.
+
+The study also runs on other cities. Muse turned one sentence into a San Diego study area, and the same code built its network and ran a test.
+
+To rerun it, see `apps/metro/scripts/`: `study.ts`, `algo-lab.ts`, `muse-city.ts` and `muse-summary.ts`. The source data is large and is not in the repo.
+
 ## Which parts are real
 
 | Part | Status |
@@ -135,6 +167,8 @@ With human drivers set to move over 60% earlier, the stadium gain held at 17% an
 | Highway routing | Production logic. Sees only GPS reports and ramp camera counts. |
 | Ramp camera counts | Production in the live demo, on Meta SAM 3.1. Modeled at the measured rate in the offline study. |
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
+| Muse Lab | Production idea, run offline. Muse Spark writes the algorithms, and the Los Angeles simulator tests them. |
+| Los Angeles study | Simulation. Real roads and Census commute flows, with modeled traffic. |
 | Graphics levels | Display only. Cameras see the same frames at every level. |
 | Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |
 
@@ -179,6 +213,8 @@ Meta models and tools used in the product: SAM 3.1 and Muse Spark 1.3, through t
 ## Assets and licenses
 
 All 3D content is generated in code. There are no third-party models or textures.
+
+Map data in the Los Angeles study is (c) OpenStreetMap contributors, available under the [Open Database License](https://www.openstreetmap.org/copyright). Commute flows are from the US Census Bureau's LODES data.
 
 - [Babylon.js](https://www.babylonjs.com/), Apache-2.0
 - [Overpass](https://fonts.google.com/specimen/Overpass) typeface, SIL Open Font License

@@ -50,6 +50,7 @@ Built:
 - Parallel Muse calls, a token budget, and a session record with every candidate.
 
 Next:
+- Understand why the winning algorithm gained far more at full size than in SimTest, and make SimTest predict full size better.
 - Run the Lab during the day: rewrite the plan from the morning's real conditions, then apply it in minutes.
 - Let Muse tune parking, trash pickup and signal timing the same way.
 - Train real models: Muse writes a PyTorch training script for short-term travel time prediction, the Lab tests the result.

@@ -109,7 +109,7 @@ if (wrong.length) {
 if (wrong.length) throw new Error(`Summary still has unsupported numbers: ${wrong.join(', ')}`);
 
 // The model sometimes changes the product's capitalization.
-const named = (text: string) => text.replace(/TEs/g, 'TES');
+const named = (text: string) => text.replaceAll('TEs', 'TES');
 summary = { headline: named(summary.headline), findings: summary.findings.map(named), caution: named(summary.caution) };
 console.log(JSON.stringify(summary, null, 1));
 console.log(`tokens ${tokens}`);
