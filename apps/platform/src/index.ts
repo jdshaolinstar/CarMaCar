@@ -2,7 +2,9 @@
 // It imports nothing from the sim. Its only contact with the sim is this HTTP API.
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import {
   distance,
   generateCity,
@@ -147,6 +149,8 @@ setInterval(() => {
 
 const app = Fastify({ bodyLimit: 3 * 1024 * 1024, logger: { level: 'warn' } });
 await app.register(cors, { origin: process.env.ALLOWED_ORIGIN ?? true });
+// One-server hosting: when SITE_DIR is set, the platform also serves the built site from the same address.
+if (process.env.SITE_DIR) await app.register(fastifyStatic, { root: resolve(process.env.SITE_DIR) });
 
 app.get('/health', async () => ({ ok: true, sessions: sessions.size, model: vision.model }));
 
