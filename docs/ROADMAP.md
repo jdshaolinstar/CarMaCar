@@ -13,30 +13,27 @@ The ring highway works as its own model. Next steps:
 
 ## Graphics levels
 
-A slider, or one slider per layer, that raises the look of the city step by step. It starts at the blocky town and ends at
-open-world game quality. It lets a demo show the idea working in the simplest form, then raise the look without
+Levels 1 to 5 are built: open **Systems**, then **Graphics level**, or add `?gfx=5` to the URL. Levels 6 and 7 are planned.
+The slider raises the look of the city step by step, from the blocky town toward open-world game quality, without
 changing the simulation.
 
 | Level | Adds |
 |---|---|
 | 1. Blocks | The original look: plain boxes for cars and buildings, flat color |
-| 2. Vehicles | Detailed car models, with several body types and paint finishes |
-| 3. Buildings | Detailed houses and storefronts, with real facades, windows and signage |
-| 4. Streets | Road surface detail, street furniture, trees, and better pedestrians |
-| 5. Lighting | Shadows, reflections, ambient occlusion and a real day and night cycle |
-| 6. Weather and atmosphere | Rain, wet roads, fog, and headlights that light the scene |
-| 7. Open-world quality | Full post-processing and high-detail assets, on a capable GPU |
+| 2. Vehicles | Detailed car models |
+| 3. Buildings | Facades and windows. This is the look vision accuracy was measured on, and the default |
+| 4. Street detail | Roof machinery, parapets, awnings, street furniture, and a sky with clouds |
+| 5. Lighting | Bloom, tone mapping and a vignette, on top of the existing shadows |
+| 6. Weather and atmosphere | Planned: rain, wet roads, fog, and headlights that light the scene |
+| 7. Open-world quality | Planned: reflections, full post-processing and high-detail assets, on a capable GPU |
 
 Rules for the build:
 
 - **Graphics never change the outcome.** Traffic and parking logic stay independent of the level, so the same seed
   gives the same city at every level.
-- **The level changes what the cameras see.** Car cameras render the same scene, so SAM reads different pixels at
-  each level. Vision accuracy has only been measured on the current look, so each level needs its own measurement
-  before a number is quoted for it. Higher levels should also be a useful test, since they sit closer to real
-  footage.
-- **Cheap frames stay cheap.** Capture cameras can use a separate level from the main view if higher levels slow
-  capture down.
+- **The level never changes what the cameras see.** Display detail sits on layers capture cameras skip, and post
+  effects attach only to viewing cameras. A pixel comparison of capture frames across levels 1 to 5 stayed within 0.08
+  out of 255, so vision numbers hold at every level. Measuring SAM on higher-detail frames is a separate, later test.
 - **It uses the swap points in [PORTING.md](PORTING.md).** Each level is a set of swappable assets and scene settings,
   not a separate code path.
 - **Scale to the machine.** Default to the highest level that holds a smooth frame rate, and let the viewer override it.

@@ -135,6 +135,7 @@ With human drivers set to move over 60% earlier, the stadium gain held at 17% an
 | Highway routing | Production logic. Sees only GPS reports and ramp camera counts. |
 | Ramp camera counts | Production in the live demo, on Meta SAM 3.1. Modeled at the measured rate in the offline study. |
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
+| Graphics levels | Display only. Cameras see the same frames at every level. |
 | Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |
 
 ## Run it yourself

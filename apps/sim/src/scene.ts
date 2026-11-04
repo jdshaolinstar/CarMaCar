@@ -34,6 +34,8 @@ const WORLD_LAYER = 0x0fffffff;
 const CAPTURE_ONLY_LAYER = 0x40000000;
 /** Building labels: shown to people, hidden from capture cameras. */
 const LABEL_LAYER = 0x20000000;
+/** Seen by people, never by capture cameras. Used for anything that exists only to look good. */
+export const DISPLAY_ONLY_LAYER = LABEL_LAYER;
 const FRAME_WIDTH = 1280;
 const FRAME_HEIGHT = 720;
 const FOV_Y = 0.9;
@@ -128,6 +130,13 @@ export class CityScene {
   private readonly hemi: HemisphericLight;
   private readonly sun: DirectionalLight;
   private readonly facadeMaterials: StandardMaterial[] = [];
+  /** Where each building stands, for the detail that graphics levels add. */
+  readonly buildingBoxes: { x: number; z: number; w: number; d: number; h: number }[] = [];
+  private readonly buildingMeshes: Mesh[] = [];
+  private readonly flatBuildings: Mesh[] = [];
+  private readonly carBlocks = new Map<string, InstancedMesh>();
+  private readonly blockTemplates = new Map<string, Mesh>();
+  private blockCars = false;
   private readonly nightLights: Mesh[] = [];
   private followedWalker: Walker | null = null;
   private walkerEyes = false;
@@ -597,6 +606,7 @@ export class CityScene {
         this.scene,
       );
       box.position.set(x, h / 2, z);
+      this.buildingBoxes.push({ x, z, w, d, h });
       byPalette[n % palettes.length].push(box);
       n++;
     };
@@ -640,7 +650,55 @@ export class CityScene {
       merged.material = m;
       merged.isPickable = false;
       this.shadows.addShadowCaster(merged);
+      this.buildingMeshes.push(merged);
     });
+  }
+
+  /** The two cameras people look through. Capture cameras are left out on purpose. */
+  get viewingCameras() {
+    return [this.overview, this.chase];
+  }
+
+  setViewDistance(metres: number) {
+    this.chase.maxZ = metres;
+  }
+
+  /** Lowest graphics levels. Capture cameras keep seeing the normal buildings. */
+  setFlatBuildings(on: boolean) {
+    if (on && this.flatBuildings.length === 0) {
+      const walls = ['#a79a8c', '#9ca9b0', '#a99b8e', '#94a3ab', '#b5a99f', '#8ea0aa'];
+      this.buildingMeshes.forEach((mesh, i) => {
+        const flat = mesh.clone(`flat-${i}`, null)!;
+        flat.material = this.solid(walls[i % walls.length]);
+        flat.layerMask = DISPLAY_ONLY_LAYER;
+        flat.isPickable = false;
+        this.flatBuildings.push(flat);
+      });
+    }
+    for (const flat of this.flatBuildings) flat.setEnabled(on);
+    for (const mesh of this.buildingMeshes) mesh.layerMask = on ? CAPTURE_ONLY_LAYER : WORLD_LAYER;
+  }
+
+  /** The lowest graphics level. Capture cameras keep seeing the normal cars. */
+  setBlockCars(on: boolean) {
+    this.blockCars = on;
+    if (!on) {
+      for (const block of this.carBlocks.values()) block.dispose();
+      this.carBlocks.clear();
+    }
+  }
+
+  private blockTemplate(hex: string) {
+    let template = this.blockTemplates.get(hex);
+    if (!template) {
+      template = MeshBuilder.CreateBox(`block-${hex}`, { width: 1.8, height: 1.35, depth: 4.4 }, this.scene);
+      template.material = this.solid(hex);
+      template.layerMask = DISPLAY_ONLY_LAYER;
+      template.isVisible = false;
+      template.isPickable = false;
+      this.blockTemplates.set(hex, template);
+    }
+    return template;
   }
 
   private buildStalls() {
@@ -936,6 +994,8 @@ export class CityScene {
         this.shadows.removeShadowCaster(mesh);
         mesh.dispose();
         this.carMeshes.delete(id);
+        this.carBlocks.get(id)?.dispose();
+        this.carBlocks.delete(id);
       }
     }
     for (const car of this.world.cars.values()) {
@@ -948,7 +1008,19 @@ export class CityScene {
       }
       mesh.position.set(car.pos.x, this.carHeight(car), car.pos.z);
       mesh.rotation.y = Math.atan2(car.heading.x, car.heading.z);
-      mesh.layerMask = car.level > this.garageTopLevel ? CAPTURE_ONLY_LAYER : WORLD_LAYER;
+      const hidden = car.level > this.garageTopLevel;
+      mesh.layerMask = hidden || this.blockCars ? CAPTURE_ONLY_LAYER : WORLD_LAYER;
+      if (!this.blockCars) continue;
+      let block = this.carBlocks.get(car.id);
+      if (!block) {
+        block = this.blockTemplate(car.color).createInstance(`block-${car.id}`);
+        block.layerMask = DISPLAY_ONLY_LAYER;
+        block.isPickable = false;
+        this.carBlocks.set(car.id, block);
+      }
+      block.position.set(mesh.position.x, mesh.position.y + 0.75, mesh.position.z);
+      block.rotation.y = mesh.rotation.y;
+      block.setEnabled(!hidden);
     }
   }
 

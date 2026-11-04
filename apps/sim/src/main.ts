@@ -7,6 +7,7 @@ import { PlatformClient } from './platform';
 import { CityScene, type CameraView, type TimeOfDay } from './scene';
 import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
+import { DEFAULT_GRAPHICS_LEVEL, GRAPHICS_LEVELS, GraphicsLevels } from './graphics';
 import { HIGHWAY_MODES, HighwayDemo, highwayDemoLayout, type HighwayModeId, type HighwayScenario } from './highway-demo';
 import { HighwayView } from './highway-view';
 import { ROUND_SECONDS, TrashHunt } from './trash-hunt';
@@ -589,6 +590,21 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: false },
   },
   {
+    id: 'graphics',
+    name: 'Graphics level',
+    description: 'How the city looks to you, from plain blocks up. Cameras see the same frames at every level.',
+    layer: 'simulation',
+    engine: 'Display only',
+    control: {
+      type: 'range',
+      value: DEFAULT_GRAPHICS_LEVEL,
+      min: 1,
+      max: GRAPHICS_LEVELS.length,
+      step: 1,
+      format: (v) => `${v}: ${GRAPHICS_LEVELS[v - 1].name}`,
+    },
+  },
+  {
     id: 'trashHunt',
     name: 'Trash hunt game',
     description: 'A timed round on foot against three rivals. Traffic carries on exactly as it would without it.',
@@ -727,7 +743,10 @@ function applySystem(id: string, value: boolean | number | string) {
     lightsOn = value as boolean;
     syncTes();
   }  else if (id === 'speed') timeScale = value as number;
-  else if (id === 'timeOfDay') scene.setTimeOfDay(value as TimeOfDay);
+  else if (id === 'timeOfDay') {
+    scene.setTimeOfDay(value as TimeOfDay);
+    graphics.setTime(value as TimeOfDay);
+  } else if (id === 'graphics') graphics.set(value as number);
   else if (id === 'highway') setHighway(value as boolean);
   else if (id === 'trashHunt') {
     if (value) startHunt();
@@ -738,6 +757,8 @@ function applySystem(id: string, value: boolean | number | string) {
   else if (id === 'highwayLimit') highwayDemo().apply({ limitMph: Number(value) });
   else if (id === 'highwayScenario') highwayDemo().apply({ scenario: value as HighwayScenario });
 }
+
+const graphics = new GraphicsLevels(scene, city);
 
 // The highway, built only when someone asks for it.
 let highwayView: HighwayView | null = null;
@@ -1421,6 +1442,7 @@ setInterval(showSelection, 1000);
 showSelection();
 
 if (params.get('time')) setSystem('timeOfDay', params.get('time')!);
+if (params.get('gfx')) setSystem('graphics', Number(params.get('gfx')));
 
 // For scripted test runs.
-Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway, rampReadings } });
+Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway, rampReadings, graphics } });
