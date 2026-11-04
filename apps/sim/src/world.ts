@@ -314,12 +314,17 @@ export class World {
     const stall = car.targetStallId ? this.stalls.get(car.targetStallId) : null;
     if (!stall) return;
     const approach = this.graph.approachEdge(stall);
-    const sameEdge = approach.from === car.edge.from && approach.to === car.edge.to;
-    if (sameEdge && this.graph.alongApproach(stall) > car.startAlong + 2) {
+    // A car mid-block is already committed to its next street, so the route has to start there.
+    // Starting from the current street gives a queue that does not connect to where the car ends up.
+    const committed = car.path && !car.endsAtStall ? this.pendingEdge.get(car.id) : undefined;
+    const from = committed ?? car.edge;
+    const fromAlong = committed ? this.graph.corner : car.startAlong;
+    const sameEdge = approach.from === from.from && approach.to === from.to;
+    if (sameEdge && this.graph.alongApproach(stall) > fromAlong + 2) {
       car.queue = [];
       return;
     }
-    car.queue = this.graph.route(car.edge, approach).slice(1);
+    car.queue = this.graph.route(from, approach).slice(1);
   }
 
   private nextEdge(car: Car): DirectedEdge {
@@ -385,6 +390,7 @@ export class World {
       if (next) {
         car.edge = next;
         car.startAlong = this.graph.corner;
+        this.pendingEdge.delete(car.id);
       }
     }
     if (car.mode === 'exit' && car.meters > 220) {

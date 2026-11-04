@@ -4,149 +4,149 @@
     "networkShare": 0,
     "parked": 40,
     "stillSearching": 0,
-    "seconds": 42.178749999999496,
-    "meters": 402.5639337658371,
-    "walk": 49.166629975414594,
-    "km": 16.102557350633482
+    "seconds": 55.1228125000007,
+    "meters": 364.3517296599121,
+    "walk": 49.77457669790849,
+    "km": 14.574069186396487
   },
   {
     "parkedShare": 0.75,
     "networkShare": 0.25,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 43.55468749999891,
-    "meters": 414.988952177591,
-    "walk": 42.512898283469255,
-    "km": 16.599558087103635
+    "parked": 21.375,
+    "stillSearching": 12,
+    "seconds": 253.6197152218093,
+    "meters": 233.4617452632047,
+    "walk": 42.73974199460082,
+    "km": 7.920009280715018
   },
   {
     "parkedShare": 0.75,
     "networkShare": 0.5,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 44.98687499999903,
-    "meters": 428.2385355036943,
-    "walk": 37.21902215444198,
-    "km": 17.129541420147774
+    "parked": 16.125,
+    "stillSearching": 14.625,
+    "seconds": 329.08906517098706,
+    "meters": 235.59210053895362,
+    "walk": 39.929403278979464,
+    "km": 7.496907858609498
   },
   {
     "parkedShare": 0.75,
     "networkShare": 0.75,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 48.00999999999896,
-    "meters": 457.4089516913248,
-    "walk": 31.6559258612199,
-    "km": 18.29635806765299
+    "parked": 9.5,
+    "stillSearching": 16,
+    "seconds": 414.4153925790305,
+    "meters": 224.3764095244961,
+    "walk": 34.36011350343158,
+    "km": 5.650712412872529
   },
   {
     "parkedShare": 0.75,
     "networkShare": 1,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 49.712187499998834,
-    "meters": 472.80506770838105,
-    "walk": 27.175285552632868,
-    "km": 18.91220270833524
+    "parked": 4.875,
+    "stillSearching": 13,
+    "seconds": 474.02464934377684,
+    "meters": 243.3662869112298,
+    "walk": 21.925269367570337,
+    "km": 4.174659186269918
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 67.70906250000083,
-    "meters": 677.6984024328723,
-    "walk": 47.862832957846905,
-    "km": 27.10793609731489
+    "parked": 39.875,
+    "stillSearching": 0.125,
+    "seconds": 86.89093750000225,
+    "meters": 568.6820107066117,
+    "walk": 47.88847773259897,
+    "km": 22.747280428264467
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0.25,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 61.84906249999934,
-    "meters": 610.9213837177782,
-    "walk": 45.41165981260794,
-    "km": 24.436855348711127
+    "parked": 15.75,
+    "stillSearching": 13.875,
+    "seconds": 339.8030093061641,
+    "meters": 271.8761666831652,
+    "walk": 44.653489547707736,
+    "km": 8.162310662142685
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0.5,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 59.822187499999,
-    "meters": 586.1055562724686,
-    "walk": 45.457164165190534,
-    "km": 23.444222250898743
+    "parked": 9,
+    "stillSearching": 17.125,
+    "seconds": 416.6046434295462,
+    "meters": 265.89113800467317,
+    "walk": 44.363253841407,
+    "km": 6.793369149141711
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0.75,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 54.66999999999861,
-    "meters": 527.0624264832061,
-    "walk": 44.0058162563006,
-    "km": 21.082497059328247
+    "parked": 6.125,
+    "stillSearching": 15.75,
+    "seconds": 454.160501395598,
+    "meters": 241.69651749118324,
+    "walk": 45.08311874087059,
+    "km": 5.140267576900651
   },
   {
     "parkedShare": 0.9,
     "networkShare": 1,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 52.383124999998536,
-    "meters": 501.5212757814749,
-    "walk": 46.862432430072275,
-    "km": 20.060851031259
+    "parked": 5.75,
+    "stillSearching": 10.625,
+    "seconds": 435.1142927632159,
+    "meters": 270.1477687637971,
+    "walk": 50.64400102538026,
+    "km": 4.368462184202954
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0,
     "parked": 40,
     "stillSearching": 0,
-    "seconds": 82.19000000000058,
-    "meters": 828.3040327195421,
-    "walk": 47.11095955773493,
-    "km": 33.132161308781676
+    "seconds": 91.12250000000137,
+    "meters": 603.6363650718101,
+    "walk": 48.158404728224305,
+    "km": 24.145454602872405
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0.25,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 68.51499999999851,
-    "meters": 678.6841495917478,
-    "walk": 47.42387266894577,
-    "km": 27.14736598366991
+    "parked": 14.75,
+    "stillSearching": 14.75,
+    "seconds": 358.140002893567,
+    "meters": 324.6881509817419,
+    "walk": 48.163870409641376,
+    "km": 10.0349817749783
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0.5,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 69.6999999999986,
-    "meters": 691.8603170500851,
-    "walk": 49.31708031194702,
-    "km": 27.6744126820034
+    "parked": 10.625,
+    "stillSearching": 16.375,
+    "seconds": 410.8415179193905,
+    "meters": 304.88320964162784,
+    "walk": 44.97109699963265,
+    "km": 8.311430564581444
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0.75,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 67.7531249999983,
-    "meters": 669.0743390893127,
-    "walk": 49.172101481573954,
-    "km": 26.762973563572512
+    "parked": 6.75,
+    "stillSearching": 16.875,
+    "seconds": 460.9078822862035,
+    "meters": 254.79000674917623,
+    "walk": 46.76461319728575,
+    "km": 6.053186996803548
   },
   {
     "parkedShare": 0.95,
     "networkShare": 1,
-    "parked": 40,
-    "stillSearching": 0,
-    "seconds": 67.98406249999825,
-    "meters": 670.2404759511041,
-    "walk": 50.85068136832505,
-    "km": 26.80961903804416
+    "parked": 5.625,
+    "stillSearching": 12.25,
+    "seconds": 450.7448044591256,
+    "meters": 264.8237663248187,
+    "walk": 56.56612888006176,
+    "km": 5.028927917846484
   }
 ]

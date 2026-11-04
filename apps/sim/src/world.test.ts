@@ -177,6 +177,47 @@ test('parking by hand fills the stall', () => {
   assert.equal(hero.phase, 'parked');
 });
 
+test('mixed network and manual traffic never crashes', async () => {
+  for (const seed of [12, 34, 77]) {
+    let world: World | undefined;
+    const service = new DelayedMapService(city, () => world!, 20);
+    world = new World(city, seed, service);
+    world.populateParked(0.6);
+    world.addScouts(8);
+    world.setDemand(World.makeDemand(city, seed + 1, 60, 200, 0.7));
+    const seen = new Set<string>();
+    for (let t = 0; t < 500; t += 1 / 20) {
+      world.tick(1 / 20);
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+      const moving = [...world.cars.values()].filter((c) => c.phase === 'drive');
+      for (let i = 0; i < moving.length; i++) {
+        for (let j = i + 1; j < moving.length; j++) {
+          const a = moving[i];
+          const b = moving[j];
+          if (Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < CRASH_DISTANCE) seen.add([a.id, b.id].sort().join('+'));
+        }
+      }
+    }
+    assert.equal(seen.size, 0, `seed ${seed}`);
+  }
+});
+
+test('network drivers all get parked, without jams or broken routes', async () => {
+  for (const seed of [1, 2, 3]) {
+    const result = await runOnce(city, {
+      seed,
+      drivers: 40,
+      spanSeconds: 240,
+      parkedShare: 0.75,
+      networkShare: 1,
+      staleSeconds: 30,
+      horizonSeconds: 700,
+    });
+    assert.equal(result.drivers, 40, `seed ${seed}: drivers lost`);
+    assert.ok(result.parked >= 38, `seed ${seed}: parked ${result.parked} of 40`);
+  }
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };
