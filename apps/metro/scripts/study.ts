@@ -63,7 +63,7 @@ for (const id of ids) {
     },
   });
   const result = sim.run();
-  const name = `${city}-${cars}-${id}-s${seed}`;
+  const name = `${city}-${cars}-${id}-s${seed}${process.env.TAG ? `-${process.env.TAG}` : ''}`;
   writeFileSync(new URL(`${name}.json`, OUT), JSON.stringify({ id, ...run, city, cars, seed, sampleRate, peopleDriving, rerouteSeconds, coordination, result, perFrame }, null, 1));
   writeFileSync(new URL(`${name}.bin`, OUT), frames);
   console.log(`${id}: ${((Date.now() - started) / 1000).toFixed(0)} s, trip ${result.meanMinutes.toFixed(1)} min, rush ${result.rushMeanMinutes.toFixed(1)}, finished ${result.finished}/${result.trips}`);

@@ -642,8 +642,9 @@ export class MetroSim {
     let entryTotal = 0;
     let rushTotal = 0;
     let rushCount = 0;
-    const rushStart = 3600;
-    const rushEnd = 7200;
+    // Clock zero is 5 AM, so this window is departures from 7 to 9 AM.
+    const rushStart = 2 * 3600;
+    const rushEnd = 4 * 3600;
     for (const car of order) {
       const trip = trips[car];
       // Queueing to join the first road counts: that wait is real. So do unfinished trips, up to the horizon.

@@ -70,6 +70,15 @@ test('routing finds the quicker road', () => {
   assert.ok(via[goal] >= 0);
 });
 
+test('rush hour means departures from 7 to 9 AM on a clock that starts at 5 AM', () => {
+  const { network, z } = setup();
+  const leave = (depart: number): Trip => ({ depart, originZone: 0, destinationZone: 1, needsStreetParking: false, adoptionRoll: 0.5 });
+  const early = new MetroSim(network, z, [leave(1.5 * 3600)], config({ horizonSeconds: 6 * 3600 })).run();
+  const peak = new MetroSim(network, z, [leave(2.5 * 3600)], config({ horizonSeconds: 6 * 3600 })).run();
+  assert.equal(early.rushMeanMinutes, 0);
+  assert.ok(peak.rushMeanMinutes > 0);
+});
+
 test('every car in light traffic finishes, close to free-flow time', () => {
   const { network, z } = setup();
   const sim = new MetroSim(network, z, trips(50, 600), config());
