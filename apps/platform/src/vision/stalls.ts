@@ -114,7 +114,9 @@ export function isUsableFrame(jpeg: Buffer, width: number, height: number): bool
 export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Stall[]): FrameAnalysis {
   const cam = pinhole(pose);
   const eye = { x: pose.position[0], z: pose.position[2] };
-  const nearby = stalls.filter((s) => Math.hypot(s.center.x - eye.x, s.center.z - eye.z) <= MAX_RANGE);
+  // Walls and floors block the view: a camera only reads stalls in the same space as itself.
+  const sameSpace = (s: Stall) => s.garageId === pose.garageId && (s.level ?? 0) === (pose.level ?? 0);
+  const nearby = stalls.filter((s) => sameSpace(s) && Math.hypot(s.center.x - eye.x, s.center.z - eye.z) <= MAX_RANGE);
   const cars = masks.map((m) => locate(m, cam));
 
   // One car, one stall: each car counts only for the stall it overlaps most.
@@ -153,7 +155,7 @@ export function analyzeFrame(masks: VehicleMask[], pose: CameraPose, stalls: Sta
           const t = ((j + 0.5) / 3 - 0.5) * stall.width;
           const px = cam.project([
             stall.center.x + stall.axis.x * s + stall.normal.x * t,
-            0,
+            pose.floorY ?? 0,
             stall.center.z + stall.axis.z * s + stall.normal.z * t,
           ]);
           if (!px || px[0] < 0 || px[0] >= pose.width || px[1] < 0 || px[1] >= pose.height) continue;

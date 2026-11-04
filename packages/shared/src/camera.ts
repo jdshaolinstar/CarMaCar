@@ -9,6 +9,11 @@ export interface CameraPose {
   fovY: number;
   width: number;
   height: number;
+  /** Set for fixed cameras inside a garage. Such a frame only reads stalls on its own level. */
+  garageId?: string;
+  level?: number;
+  /** Height of the floor in view. Zero for the street. */
+  floorY?: number;
 }
 
 const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -45,7 +50,7 @@ export function pinhole(pose: CameraPose): PinholeCamera {
         right[2] * a + up[2] * b + forward[2],
       ];
       if (dir[1] >= -1e-4) return null;
-      const t = -pose.position[1] / dir[1];
+      const t = ((pose.floorY ?? 0) - pose.position[1]) / dir[1];
       return { x: pose.position[0] + dir[0] * t, z: pose.position[2] + dir[2] * t };
     },
   };

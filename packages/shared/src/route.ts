@@ -59,8 +59,16 @@ export class RoadGraph {
     return s.a === e.from ? s.dir : scale(s.dir, -1);
   }
 
-  /** The directed edge from which a stall sits on the driver's right. */
+  garage(id: string) {
+    return this.city.garages.find((g) => g.id === id)!;
+  }
+
+  /** The directed edge from which a stall sits on the driver's right, or a garage door does. */
   approachEdge(stall: Stall): DirectedEdge {
+    if (stall.garageId) {
+      const g = this.garage(stall.garageId);
+      return { from: g.entryFrom, to: g.entryTo };
+    }
     const s = this.segment(stall.segmentId);
     const forward: DirectedEdge = { from: s.a, to: s.b };
     return dot(rightOf(s.dir), stall.normal) > 0 ? forward : { from: s.b, to: s.a };
@@ -68,6 +76,7 @@ export class RoadGraph {
 
   /** Distance from the start of the approach edge to a point beside the stall. */
   alongApproach(stall: Stall): number {
+    if (stall.garageId) return this.garage(stall.garageId).entryAlong;
     const s = this.segment(stall.segmentId);
     return this.approachEdge(stall).from === s.a ? stall.along : s.length - stall.along;
   }

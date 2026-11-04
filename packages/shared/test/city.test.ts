@@ -8,7 +8,9 @@ const graph = new RoadGraph(city);
 test('city size matches the plan', () => {
   assert.equal(city.nodes.length, 12);
   assert.equal(city.segments.length, 17);
-  assert.ok(city.stalls.length >= 80 && city.stalls.length <= 150, `stalls: ${city.stalls.length}`);
+  const street = city.stalls.filter((s) => !s.garageId);
+  assert.ok(street.length >= 80 && street.length <= 150, `street stalls: ${street.length}`);
+  assert.equal(city.garages.length, 2);
   assert.equal(new Set(city.stalls.map((s) => s.id)).size, city.stalls.length);
 });
 
@@ -19,6 +21,12 @@ test('every stall can be reached from every edge, always on the right', () => {
     const chain = graph.route(start, approach);
     const last = chain[chain.length - 1];
     assert.deepEqual(last, approach);
+    if (stall.garageId) {
+      const g = graph.garage(stall.garageId);
+      const dir = graph.edgeDir(approach);
+      assert.ok(dir.z * g.inward.x - dir.x * g.inward.z > 0, `${g.id} door should be on the right`);
+      continue;
+    }
     const lane = graph.lanePoint(approach, graph.alongApproach(stall));
     assert.ok(distance(lane, stall.center) < 4, `${stall.id} is ${distance(lane, stall.center)} from its lane`);
   }

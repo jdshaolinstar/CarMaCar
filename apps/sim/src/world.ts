@@ -10,7 +10,8 @@ import {
   sub,
   type CityMap,
   type DirectedEdge,
-  type Path,
+  type Garage,
+  Path,
   type Stall,
   type TripPlan,
   type TwinSnapshot,
@@ -52,6 +53,19 @@ export interface Car {
   movement: Movement | null;
   /** The intersection this car is inside. */
   junction: string | null;
+  /** Garage floor this car is on. Zero is street level. */
+  level: number;
+  insideGarage: boolean;
+  garageLegs: GarageLeg[];
+  /** Seconds left on the transporter. */
+  liftT: number;
+  liftFrom: number;
+  /** Waiting for a safe landing on this floor. */
+  pendingLift: number | null;
+  waitingToMerge: Vec2 | null;
+  /** Pulling out of a garage. Street traffic gives way. */
+  merging: boolean;
+  mergedAt: number;
   /** Set while a person is driving this car. */
   control: { throttle: number; steer: number } | null;
   spawnedAt: number;
@@ -60,6 +74,15 @@ export interface Car {
   /** A follow-up stop for trips with several legs. */
   nextLegs: { destinationId: string; stayMinutes: number | null }[];
   tripId: string | null;
+}
+
+export interface GarageLeg {
+  path: Path;
+  level: number;
+  /** Ride the transporter to this leg's level before driving it. */
+  lift?: boolean;
+  /** The last leg, out onto the street. Waits for a gap in traffic first. */
+  merge?: boolean;
 }
 
 export interface ParkingService {
@@ -99,6 +122,17 @@ const COMFORT_BRAKING = 4;
 const HARD_BRAKING = 8;
 
 const CLAIM_MARGIN = 2;
+const GARAGE_SPEED = 5;
+const GARAGE_LANE_OFFSET = 1.6;
+const GARAGE_MERGE_AHEAD = 8;
+const LIFT_SECONDS = 1.6;
+const PAD_REACH = 5;
+const LANDING_LENGTH = 6;
+/** Street traffic covers this in about 3 seconds, the time a car takes to pull out. */
+const MERGE_GAP = 36;
+const HUB_RADIUS = 9;
+const AISLE_CLEARANCE = 13;
+const PULL_OUT_GAP = 26;
 
 const MANUAL_ACCELERATION = 5;
 const MANUAL_BRAKING = 10;
@@ -142,6 +176,8 @@ export class World {
   readonly signals: Signals;
   /** Node id to the cars currently inside that intersection. */
   private readonly junctions = new Map<string, Set<string>>();
+  /** Garage and level to the car currently crossing that hub. */
+  private readonly hubTurns = new Map<string, string>();
   time = 0;
   /** Live city: cars take new trips instead of leaving. The adoption study keeps this off. */
   keepCarsInCity = false;
@@ -208,6 +244,15 @@ export class World {
       stopS: Infinity,
       movement: null,
       junction: null,
+      level: 0,
+      insideGarage: false,
+      garageLegs: [],
+      liftT: 0,
+      liftFrom: 0,
+      pendingLift: null,
+      waitingToMerge: null,
+      merging: false,
+      mergedAt: -Infinity,
       control: null,
       spawnedAt: this.time,
       meters: 0,
@@ -239,7 +284,9 @@ export class World {
     car.phase = 'parked';
     car.stallId = stall.id;
     car.pos = stall.center;
-    car.heading = this.graph.edgeDir(car.edge);
+    car.heading = stall.garageId ? stall.normal : this.graph.edgeDir(car.edge);
+    car.level = stall.level ?? 0;
+    car.insideGarage = !!stall.garageId;
     car.leaveAt = permanent ? Infinity : this.time + this.parkedSeconds();
     this.stallOwner.set(stall.id, car.id);
     return car;
@@ -328,6 +375,7 @@ export class World {
 
   /** Point a car at a stall. It re-plans at the next corner. */
   targetStall(car: Car, stallId: string) {
+    if (car.insideGarage) return; // Already committed to this garage.
     this.leaveFinalApproach(car);
     car.targetStallId = stallId;
     car.mode = 'toStall';
@@ -396,6 +444,41 @@ export class World {
 
   private finishPath(car: Car) {
     this.leaveJunction(car);
+    if (car.garageLegs.length > 0) {
+      this.nextGarageLeg(car);
+      return;
+    }
+    if (car.insideGarage && !car.endsAtStall) {
+      // Out of the garage and back in the lane.
+      car.insideGarage = false;
+      car.merging = false;
+      car.mergedAt = this.time;
+      this.beginPath(car);
+      return;
+    }
+    const arrivingAt = car.endsAtStall && car.targetStallId ? this.stalls.get(car.targetStallId) : null;
+    if (arrivingAt?.garageId && !car.insideGarage) {
+      // Reached the door: turn in.
+      car.insideGarage = true;
+      car.garageLegs = this.entryLegs(this.garageOf(arrivingAt), arrivingAt, car.pos);
+      this.nextGarageLeg(car);
+      return;
+    }
+    if (arrivingAt?.garageId && this.stallOwner.has(arrivingAt.id)) {
+      const g = this.garageOf(arrivingAt);
+      const other = this.city.stalls.find((s) => s.garageId === g.id && (s.level ?? 0) === car.level && !this.stallOwner.has(s.id));
+      this.parking?.release(car.id);
+      if (other) {
+        car.targetStallId = other.id;
+        car.path = Path.from([car.pos, this.aislePoint(g, other, false)]);
+        car.s = 0;
+      } else {
+        car.targetStallId = null;
+        car.mode = 'cruise';
+        this.leaveGarage(car, arrivingAt);
+      }
+      return;
+    }
     if (car.endsAtStall) {
       const stallId = car.targetStallId!;
       if (this.stallOwner.has(stallId)) {
@@ -472,6 +555,8 @@ export class World {
     car.excludeStalls = [];
     car.path = null;
     car.meters = 0;
+    // A driver at the keyboard finds their own way out.
+    if (stall.garageId && !car.control) this.leaveGarage(car, stall);
     const next = car.nextLegs.shift();
     if (next) {
       car.destinationId = next.destinationId;
@@ -500,7 +585,7 @@ export class World {
   syncWithTwin(twin: TwinSnapshot) {
     if (!this.guidance) return;
     for (const car of this.cars.values()) {
-      if (car.role !== 'network' || car.phase !== 'drive') continue;
+      if (car.role !== 'network' || car.phase !== 'drive' || car.insideGarage) continue;
       if (car.targetStallId) {
         const stall = twin.stalls[car.targetStallId];
         if (stall && stall.reservedBy !== car.id) {
@@ -547,7 +632,7 @@ export class World {
     let best: Stall | null = null;
     let bestAlong = Infinity;
     for (const stall of this.city.stalls) {
-      if (stall.segmentId !== seg.id || this.stallOwner.has(stall.id)) continue;
+      if (stall.garageId || stall.segmentId !== seg.id || this.stallOwner.has(stall.id)) continue;
       const approach = this.graph.approachEdge(stall);
       if (approach.from !== car.edge.from) continue;
       const stallAlong = this.graph.alongApproach(stall);
@@ -564,6 +649,140 @@ export class World {
     car.s = 0;
     car.endsAtStall = true;
     car.queue = [];
+  }
+
+  // Garages. Cars follow a short list of legs: door to transporter, up, then along the aisle.
+
+  private garageOf(stall: Stall): Garage {
+    return this.graph.garage(stall.garageId!);
+  }
+
+  /** Point in the entry spine's lane, on the right of a car heading in or out. */
+  private spinePoint(g: Garage, base: Vec2, headingIn: boolean): Vec2 {
+    const heading = headingIn ? g.inward : scale(g.inward, -1);
+    return add(base, scale(rightOf(heading), GARAGE_LANE_OFFSET));
+  }
+
+  /** Point in the aisle lane beside a stall, for a car heading toward or away from the hub. */
+  private aislePoint(g: Garage, stall: Stall, towardHub: boolean): Vec2 {
+    const u = dot(sub(stall.center, g.hub), g.aisle);
+    const direction = Math.sign(u) * (towardHub ? -1 : 1);
+    const heading = scale(g.aisle, direction);
+    return add(add(g.hub, scale(g.aisle, u)), scale(rightOf(heading), GARAGE_LANE_OFFSET));
+  }
+
+  private entryLegs(g: Garage, stall: Stall, from: Vec2): GarageLeg[] {
+    const level = stall.level ?? 0;
+    const spineIn = (p: Vec2) => this.spinePoint(g, p, true);
+    const toPad = [from, spineIn(g.door), spineIn(g.pad)];
+    const aisle = this.aislePoint(g, stall, false);
+    const toStall = [spineIn(g.pad), spineIn(g.hub), this.aisleEntry(g, stall, false), aisle];
+    if (level === 0) return [{ path: Path.from([...toPad, ...toStall.slice(1)]), level: 0 }];
+    return [{ path: Path.from(toPad), level: 0 }, { path: Path.from(toStall), level, lift: true }];
+  }
+
+  /** Where a car settles into its aisle lane just off the hub, so it never drifts across the aisle. */
+  private aisleEntry(g: Garage, stall: Stall, towardHub: boolean): Vec2 {
+    const lane = this.aislePoint(g, stall, towardHub);
+    const u = dot(sub(stall.center, g.hub), g.aisle);
+    return add(lane, scale(g.aisle, -u + Math.sign(u) * 3.5));
+  }
+
+  private exitLegs(g: Garage, from: Vec2, level: number, merge: Vec2, stall: Stall): GarageLeg[] {
+    const spineOut = (p: Vec2) => this.spinePoint(g, p, false);
+    const toPad = [from, this.aisleEntry(g, stall, true), spineOut(g.hub), spineOut(g.pad)];
+    const toDoor = [spineOut(g.pad), spineOut(g.door)];
+    const leaveLeg: GarageLeg = { path: Path.from([spineOut(g.door), merge]), level: 0, merge: true };
+    if (level === 0) return [{ path: Path.from([...toPad, ...toDoor.slice(1)]), level: 0 }, leaveLeg];
+    return [{ path: Path.from(toPad), level }, { path: Path.from(toDoor), level: 0, lift: true }, leaveLeg];
+  }
+
+  private nextGarageLeg(car: Car) {
+    const leg = car.garageLegs.shift()!;
+    car.path = leg.path;
+    car.s = 0;
+    if (leg.lift) car.pendingLift = leg.level;
+    if (leg.merge) car.waitingToMerge = leg.path.points[leg.path.points.length - 1];
+  }
+
+  private leaveGarage(car: Car, stall: Stall) {
+    const g = this.garageOf(stall);
+    car.edge = this.graph.approachEdge(stall);
+    car.startAlong = g.entryAlong + GARAGE_MERGE_AHEAD;
+    car.garageLegs = this.exitLegs(g, car.pos, car.level, this.graph.lanePoint(car.edge, car.startAlong), stall);
+    car.endsAtStall = false;
+    this.nextGarageLeg(car);
+  }
+
+  /**
+   * Whether a car can land on another floor without hitting anyone in its own lane.
+   * Only this lane counts: checking the whole pad would let an entering car and an exiting
+   * car wait on each other forever.
+   */
+  private landingClear(car: Car, level: number): boolean {
+    for (const other of this.cars.values()) {
+      if (other === car || other.level !== level || other.phase === 'parked') continue;
+      const rel = sub(other.pos, car.pos);
+      if (Math.abs(dot(rel, car.heading)) < LANDING_LENGTH && Math.abs(dot(rel, rightOf(car.heading))) < 1.4) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Where the aisle meets the entry spine, cars cross paths, so one car goes through at a time.
+   * Returns false if this car has to wait.
+   */
+  private takeHubTurn(car: Car): boolean {
+    const g = this.isInsideGarage(car.pos);
+    if (!g) return true;
+    const key = `${g.id}:${car.level}`;
+    const holder = this.hubTurns.get(key);
+    const near = distance(car.pos, g.hub) < HUB_RADIUS;
+    if (!near) {
+      if (holder === car.id) this.hubTurns.delete(key);
+      return true;
+    }
+    if (holder && holder !== car.id && this.cars.has(holder)) return false;
+    this.hubTurns.set(key, car.id);
+    return true;
+  }
+
+  /** Whether the aisle outside a garage stall is free to back out into. */
+  private aisleClear(car: Car, stall: Stall): boolean {
+    const exit = this.aislePoint(this.garageOf(stall), stall, true);
+    for (const other of this.cars.values()) {
+      if (other !== car && other.level === car.level && other.phase !== 'parked' && distance(other.pos, exit) < AISLE_CLEARANCE) return false;
+    }
+    return true;
+  }
+
+  /** Moves a car between levels. Only works on the transporter pad. */
+  useTransporter(car: Car, level: number): boolean {
+    const g = this.city.garages.find((x) => distance(x.pad, car.pos) < PAD_REACH);
+    if (!g || level < 0 || level >= g.levels || level === car.level || Math.abs(car.speed) > 2) return false;
+    car.speed = 0;
+    car.liftT = LIFT_SECONDS;
+    car.liftFrom = car.level;
+    car.level = level;
+    return true;
+  }
+
+  isInsideGarage(point: Vec2): Garage | null {
+    for (const g of this.city.garages) {
+      const rel = sub(point, g.door);
+      const u = Math.abs(dot(rel, g.aisle));
+      const v = dot(rel, g.inward);
+      if (u <= g.width / 2 - 1 && v >= 0 && v <= g.depth - 1) return g;
+    }
+    return null;
+  }
+
+  private isOnDriveway(point: Vec2): boolean {
+    for (const g of this.city.garages) {
+      const rel = sub(point, g.door);
+      if (Math.abs(dot(rel, g.aisle)) <= 4 && dot(rel, g.inward) >= -8 && dot(rel, g.inward) <= 1) return true;
+    }
+    return false;
   }
 
   /** Hands a moving car to the keyboard. */
@@ -588,6 +807,15 @@ export class World {
   releaseControl(car: Car) {
     car.control = null;
     if (car.phase !== 'drive') return;
+    const inside = this.isInsideGarage(car.pos);
+    if (inside) {
+      // Hand the car back cleanly: it drives itself out.
+      const anyStall = this.city.stalls.find((s) => s.garageId === inside.id)!;
+      car.targetStallId = null;
+      car.mode = car.role === 'hero' ? 'wander' : 'cruise';
+      this.leaveGarage(car, anyStall);
+      return;
+    }
     this.updateEdge(car);
     const along = dot(sub(car.pos, this.graph.node(car.edge.from)), this.graph.edgeDir(car.edge));
     const length = this.graph.edgeLength(car.edge);
@@ -606,6 +834,7 @@ export class World {
     if (car.phase !== 'drive' || Math.abs(car.speed) > 2) return null;
     let found: Stall | null = null;
     for (const stall of this.city.stalls) {
+      if ((stall.level ?? 0) !== car.level || !!stall.garageId !== car.insideGarage) continue;
       if (!this.stallOwner.has(stall.id) && distance(stall.center, car.pos) < 4.5) found = stall;
     }
     if (!found) return null;
@@ -615,14 +844,17 @@ export class World {
     car.phase = 'parked';
     car.speed = 0;
     car.pos = found.center;
-    car.heading = this.graph.edgeDir(this.graph.approachEdge(found));
+    car.heading = found.garageId ? found.normal : this.graph.edgeDir(this.graph.approachEdge(found));
     car.leaveAt = Infinity;
     this.parking?.arrived(car.id);
     return found.id;
   }
 
   /** Cars can use roads and sidewalks. Everything else is a building or a block. */
-  isDrivable(point: Vec2): boolean {
+  isDrivable(point: Vec2, level = 0): boolean {
+    if (this.isInsideGarage(point)) return true;
+    if (level > 0) return false; // Upper floors have walls all round.
+    if (this.isOnDriveway(point)) return true;
     const reach = this.city.roadHalfWidth + this.city.sidewalkWidth - DRIVER_HALF_WIDTH;
     for (const seg of this.city.segments) {
       const rel = sub(point, this.graph.node(seg.a));
@@ -637,7 +869,7 @@ export class World {
   private hitsCar(car: Car, point: Vec2, heading: Vec2): boolean {
     const mine = [add(point, scale(heading, 1.4)), add(point, scale(heading, -1.4))];
     for (const other of this.cars.values()) {
-      if (other === car || distance(other.pos, point) > 8) continue;
+      if (other === car || other.level !== car.level || distance(other.pos, point) > 8) continue;
       const theirs = [add(other.pos, scale(other.heading, 1.4)), add(other.pos, scale(other.heading, -1.4))];
       for (const a of mine) {
         for (const b of theirs) {
@@ -677,7 +909,7 @@ export class World {
     const heading = { x: turned.x / length, z: turned.z / length };
     const next = add(car.pos, scale(heading, car.speed * dt));
 
-    if (!this.isDrivable(next) || this.hitsCar(car, next, heading)) {
+    if (!this.isDrivable(next, car.level) || this.hitsCar(car, next, heading)) {
       car.speed *= -0.25; // A small bounce, so the driver can back away.
       return;
     }
@@ -686,15 +918,17 @@ export class World {
     car.heading = heading;
     car.meters += moved;
     car.metersSinceCapture += moved;
+    car.insideGarage = this.isInsideGarage(car.pos) !== null;
     this.updateEdge(car);
   }
 
   /** Distance to the nearest car on the road this car is about to drive, following its path around corners. */
   private gapAhead(car: Car): number {
     const path = car.path;
-    if (!path) return Infinity;
+    // A merging car has priority. If both sides yielded they would wait on each other forever.
+    if (!path || car.merging) return Infinity;
     const nearby = [...this.cars.values()].filter(
-      (other) => other !== car && other.phase !== 'parked' && distance(other.pos, car.pos) < GAP_LOOKAHEAD + 5,
+      (other) => other !== car && other.phase !== 'parked' && other.level === car.level && distance(other.pos, car.pos) < GAP_LOOKAHEAD + 5,
     );
     if (nearby.length === 0) return Infinity;
     const end = path.sample(path.length);
@@ -705,7 +939,7 @@ export class World {
       const point = beyond > 0 ? add(end.point, scale(end.tangent, beyond)) : path.sample(along).point;
       for (const other of nearby) {
         // A car pulling out of a stall is about to be in this lane, so give it room.
-        const reach = other.phase === 'parkOut' ? 4.5 : 1.9;
+        const reach = other.phase === 'parkOut' || other.merging ? 4.5 : 1.9;
         if (distance(other.pos, point) < reach) return ahead;
       }
     }
@@ -743,7 +977,8 @@ export class World {
   /** Whether a stretch of lane is clear enough to pull out or spawn into. */
   private laneClear(point: Vec2, radius: number, ignore?: Car): boolean {
     for (const other of this.cars.values()) {
-      if (other !== ignore && other.phase !== 'parked' && distance(other.pos, point) < radius) return false;
+      if (other === ignore || other.phase === 'parked' || (other.insideGarage && !other.merging)) continue;
+      if (distance(other.pos, point) < radius) return false;
     }
     return true;
   }
@@ -765,7 +1000,9 @@ export class World {
       if (car.phase === 'parked') {
         // Wait for a gap before pulling out into the lane.
         const wantsToLeave = this.time >= car.leaveAt && (this.driversEnabled || car.control !== null);
-        if (wantsToLeave && this.laneClear(car.pos, 18, car)) this.beginLeaving(car);
+        const stall = car.stallId ? this.stalls.get(car.stallId) : null;
+        const roomToPull = stall?.garageId ? this.aisleClear(car, stall) : this.laneClear(car.pos, PULL_OUT_GAP, car);
+        if (wantsToLeave && roomToPull) this.beginLeaving(car);
         continue;
       }
       if (car.phase === 'parkIn' || car.phase === 'parkOut') {
@@ -773,21 +1010,48 @@ export class World {
         const stall = this.stalls.get(car.stallId!)!;
         const t = Math.min(car.parkT, 1);
         const smooth = t * t * (3 - 2 * t);
-        const dir = this.graph.edgeDir(this.graph.approachEdge(stall));
+        const dir = stall.garageId ? stall.normal : this.graph.edgeDir(this.graph.approachEdge(stall));
         if (car.phase === 'parkIn') {
           car.pos = add(scale(car.parkFrom, 1 - smooth), scale(stall.center, smooth));
           car.heading = dir;
           if (t >= 1) this.finishParking(car);
         } else {
-          const exit = add(stall.center, add(scale(stall.normal, -3), scale(dir, 3)));
+          const exit = stall.garageId
+            ? this.aislePoint(this.garageOf(stall), stall, true)
+            : add(stall.center, add(scale(stall.normal, -3), scale(dir, 3)));
           car.pos = add(scale(stall.center, 1 - smooth), scale(exit, smooth));
           if (t >= 1) this.finishLeaving(car);
         }
         continue;
       }
 
+      if (car.pendingLift !== null) {
+        car.speed = 0;
+        if (!this.landingClear(car, car.pendingLift)) continue;
+        car.liftT = LIFT_SECONDS;
+        car.liftFrom = car.level;
+        car.level = car.pendingLift;
+        car.pendingLift = null;
+      }
+      if (car.liftT > 0) {
+        car.liftT -= dt;
+        car.speed = 0;
+        continue;
+      }
       if (car.control) {
         this.driveByHand(car, dt);
+        continue;
+      }
+      if (car.waitingToMerge) {
+        if (!this.laneClear(car.waitingToMerge, MERGE_GAP, car)) {
+          car.speed = 0;
+          continue;
+        }
+        car.waitingToMerge = null;
+        car.merging = true;
+      }
+      if (car.insideGarage && !this.takeHubTurn(car)) {
+        car.speed = 0;
         continue;
       }
 
@@ -797,7 +1061,7 @@ export class World {
 
       // Drivers slow down when they near their spot, which also gives cameras time to look at it.
       const nearingStall = car.endsAtStall && path.length - car.s < APPROACH_DISTANCE;
-      let limit = nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
+      let limit = car.insideGarage ? GARAGE_SPEED : nearingStall ? APPROACH_SPEED : CRUISE_SPEED;
       limit = Math.min(limit, brakingSpeed(this.gapAhead(car) - FOLLOW_GAP));
 
       const toStopLine = car.stopS - car.s;

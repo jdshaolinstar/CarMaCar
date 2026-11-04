@@ -66,6 +66,15 @@ test('an empty view reports fully visible stalls as free', () => {
   assert.ok(observations.every((o) => o.state === 'free'));
 });
 
+test('a street camera never reads garage stalls, and a garage camera only reads its own level', () => {
+  const inGarage = (level: number): Stall => ({ ...stall(`G${level}`, 14), garageId: 'GA', level });
+  const garageStalls = [inGarage(0), inGarage(1)];
+  assert.equal(analyzeFrame([], pose, garageStalls).observations.length, 0);
+  const upstairs: CameraPose = { ...pose, position: [0, 5, 2.5], target: [16, 3.8, 7], garageId: 'GA', level: 1, floorY: 3.6 };
+  const ids = analyzeFrame([], upstairs, garageStalls).observations.map((o) => o.stallId);
+  assert.deepEqual(ids, ['G1']);
+});
+
 test('stalls beyond trust range produce no observation', () => {
   const far = [stall('FAR', 60)];
   assert.equal(analyzeFrame([], pose, far).observations.length, 0);

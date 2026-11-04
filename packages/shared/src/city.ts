@@ -34,6 +34,9 @@ export interface Stall {
   width: number;
   /** Distance from node a along the segment. */
   along: number;
+  /** Set for stalls inside a garage. Their axis runs along the aisle and normal points in from it. */
+  garageId?: string;
+  level?: number;
 }
 
 export type DestinationKind = 'cinema' | 'restaurant' | 'grocery' | 'hardware' | 'cafe' | 'clinic' | 'apartments';
@@ -48,11 +51,42 @@ export interface Destination extends Vec2 {
   normal: Vec2;
 }
 
+export interface GarageCamera {
+  level: number;
+  position: [number, number, number];
+  target: [number, number, number];
+}
+
+export interface Garage extends Vec2 {
+  id: string;
+  name: string;
+  levels: number;
+  floorHeight: number;
+  width: number;
+  depth: number;
+  /** Where the street meets the building. */
+  door: Vec2;
+  /** Unit vector from the street into the garage. */
+  inward: Vec2;
+  /** Unit vector along the parking aisle. */
+  aisle: Vec2;
+  /** The level transporter. */
+  pad: Vec2;
+  /** Where the entry spine meets the aisle. */
+  hub: Vec2;
+  /** Cars enter from this directed street, turning right. */
+  entryFrom: string;
+  entryTo: string;
+  entryAlong: number;
+  cameras: GarageCamera[];
+}
+
 export interface CityMap {
   nodes: CityNode[];
   segments: Segment[];
   stalls: Stall[];
   destinations: Destination[];
+  garages: Garage[];
   roadHalfWidth: number;
   sidewalkWidth: number;
   laneOffset: number;
@@ -69,6 +103,24 @@ export const LANE_OFFSET = 1.8;
 
 const ROW_STREETS = ['Pine St', 'Market St', 'Mission St'];
 const COLUMN_STREETS = ['1st Ave', '2nd Ave', '3rd Ave', '4th Ave'];
+
+const GARAGE_WIDTH = 60;
+const GARAGE_DEPTH = 32;
+const GARAGE_LEVELS = 3;
+const GARAGE_FLOOR_HEIGHT = 3.6;
+const GARAGE_STALL_WIDTH = 2.8;
+const GARAGE_STALL_DEPTH = 5.4;
+const GARAGE_STALL_SPACING = 3.2;
+const GARAGE_STALLS_PER_SIDE = 7;
+const AISLE_HALF_WIDTH = 3.5;
+const PAD_DEPTH = 8;
+const HUB_DEPTH = 21;
+const CAMERA_HEIGHT = 2.9;
+
+const GARAGE_SPECS = [
+  { id: 'GA', name: 'Garage A', segment: 'H1-1', door: { x: 0, z: 15 }, inward: { x: 0, z: 1 }, entryFromEnd: true },
+  { id: 'GB', name: 'Garage B', segment: 'H0-1', door: { x: 0, z: -87 }, inward: { x: 0, z: -1 }, entryFromEnd: false },
+];
 
 const STALL_LENGTH = 6.5;
 const STALL_WIDTH = 2.4;
@@ -148,6 +200,66 @@ export function generateCity(): CityMap {
     }
   });
 
+  const garages: Garage[] = [];
+  for (const spec of GARAGE_SPECS) {
+    const seg = segments.find((s) => s.id === spec.segment)!;
+    const aisle = { x: 1, z: 0 };
+    const local = (u: number, v: number) => add(add(spec.door, scale(aisle, u)), scale(spec.inward, v));
+    const hub = local(0, HUB_DEPTH);
+    const cameras: GarageCamera[] = [];
+    for (let level = 0; level < GARAGE_LEVELS; level++) {
+      const floor = level * GARAGE_FLOOR_HEIGHT;
+      for (const side of [-1, 1]) {
+        const eye = local(side * 28, HUB_DEPTH);
+        const look = local(side * 6, HUB_DEPTH);
+        cameras.push({ level, position: [eye.x, floor + CAMERA_HEIGHT, eye.z], target: [look.x, floor + 0.4, look.z] });
+      }
+    }
+    const garage: Garage = {
+      id: spec.id,
+      name: spec.name,
+      levels: GARAGE_LEVELS,
+      floorHeight: GARAGE_FLOOR_HEIGHT,
+      width: GARAGE_WIDTH,
+      depth: GARAGE_DEPTH,
+      door: spec.door,
+      inward: spec.inward,
+      aisle,
+      pad: local(0, PAD_DEPTH),
+      hub,
+      ...local(0, GARAGE_DEPTH / 2),
+      entryFrom: spec.entryFromEnd ? seg.b : seg.a,
+      entryTo: spec.entryFromEnd ? seg.a : seg.b,
+      entryAlong: seg.length / 2,
+      cameras,
+    };
+    garages.push(garage);
+
+    for (let level = 0; level < GARAGE_LEVELS; level++) {
+      let number = 1;
+      for (const row of [-1, 1]) {
+        const offset = AISLE_HALF_WIDTH + GARAGE_STALL_DEPTH / 2;
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < GARAGE_STALLS_PER_SIDE; i++) {
+            const u = side * (5 + i * GARAGE_STALL_SPACING);
+            stalls.push({
+              id: `${spec.id}${level + 1}-${String(number++).padStart(2, '0')}`,
+              segmentId: seg.id,
+              center: local(u, HUB_DEPTH + row * offset),
+              axis: aisle,
+              normal: scale(spec.inward, row),
+              length: GARAGE_STALL_WIDTH,
+              width: GARAGE_STALL_DEPTH,
+              along: 0,
+              garageId: spec.id,
+              level,
+            });
+          }
+        }
+      }
+    }
+  }
+
   const segmentById = new Map(segments.map((s) => [s.id, s]));
   const destinations: Destination[] = DESTINATION_SPECS.map((spec, i) => {
     const seg = segmentById.get(spec.segment)!;
@@ -173,6 +285,7 @@ export function generateCity(): CityMap {
     segments,
     stalls,
     destinations,
+    garages,
     roadHalfWidth: ROAD_HALF_WIDTH,
     sidewalkWidth: SIDEWALK_WIDTH,
     laneOffset: LANE_OFFSET,
