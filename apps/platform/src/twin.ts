@@ -140,9 +140,8 @@ export class Twin {
     const now = Date.now() / 1000;
     const levels: Record<string, number> = {};
     for (const seg of this.city.segments) {
-      const free = seg.length / 11;
-      const worst = Math.max(this.tes.edgeSeconds({ from: seg.a, to: seg.b }, now), this.tes.edgeSeconds({ from: seg.b, to: seg.a }, now));
-      levels[seg.id] = +(worst / free).toFixed(2);
+      const worst = Math.max(this.tes.congestion({ from: seg.a, to: seg.b }, now), this.tes.congestion({ from: seg.b, to: seg.a }, now));
+      levels[seg.id] = +worst.toFixed(2);
     }
     return levels;
   }
@@ -158,6 +157,7 @@ export class Twin {
       usage: { frames: this.frameCount, frameLimit, budgetExhausted },
       traffic: this.trafficLevels(),
       cameraTrafficCounts: this.cameraTrafficCounts,
+      avoidedStreets: [...this.tes.streetPenalties.keys()],
     };
   }
 }

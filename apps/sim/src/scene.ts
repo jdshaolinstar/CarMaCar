@@ -688,15 +688,15 @@ export class CityScene {
   }
 
   /** Renders a real frame from the camera. Returns a JPEG data URL. */
-  captureFrame(pose: CameraPose): Promise<string> {
-    const run = this.captureChain.then(() => this.renderFrame(pose));
+  captureFrame(pose: CameraPose, onRendered?: () => void): Promise<string> {
+    const run = this.captureChain.then(() => this.renderFrame(pose, onRendered));
     this.captureChain = run.catch(() => undefined);
     return run;
   }
 
   // Uses its own offscreen target. Babylon's screenshot helper resizes the main canvas,
   // which collides with the render loop and leaves ghost trails on screen.
-  private renderFrame(pose: CameraPose): Promise<string> {
+  private renderFrame(pose: CameraPose, onRendered?: () => void): Promise<string> {
     return new Promise((resolve, reject) => {
       this.capture.fov = pose.fovY;
       this.capture.position.set(...pose.position);
@@ -706,6 +706,7 @@ export class CityScene {
       this.frameTarget.renderList = this.scene.meshes.filter((m) => m.layerMask !== OVERLAY_LAYER && m.layerMask !== LABEL_LAYER);
       this.frameTarget.resetRefreshCounter();
       this.scene.onAfterRenderObservable.addOnce(async () => {
+        onRendered?.();
         try {
           const pixels = (await this.frameTarget.readPixels(0, 0, null, true)) as Uint8Array;
           resolve(this.encodeJpeg(pixels));

@@ -43,6 +43,8 @@
       <div class="tools">
         <button id="place" type="button" aria-pressed="false">Place a car</button>
         <button id="systems-open" type="button" aria-pressed="false">Systems</button>
+        <button id="playbooks-open" type="button" aria-pressed="false">Playbooks</button>
+        <button id="phone-open" type="button" aria-pressed="false">Phone app</button>
       </div>
       <p class="hint" id="place-hint" hidden>Click a stall on this map or in the city. Click a parked car's stall to remove it.</p>
     </section>
@@ -98,6 +100,37 @@
         </div>
       </form>
     </section>
+
+    <section class="panel systems-panel" id="playbooks" aria-label="Playbooks" hidden>
+      <h2>Playbooks</h2>
+      <p class="hint">One click sets up a scenario. Run the pairs back to back to compare.</p>
+      <div class="playbook-now" id="playbook-now" hidden>
+        <p id="playbook-title"></p>
+        <p class="hint" id="playbook-watch"></p>
+      </div>
+      <div class="playbook-list" id="playbook-list"></div>
+    </section>
+
+    <aside class="phone" id="phone" aria-label="Driver's phone app" hidden>
+      <div class="phone-screen">
+        <header class="phone-bar">
+          <span class="phone-mark" aria-hidden="true">P</span>
+          <b>CarMaCar</b>
+          <span class="phone-karma"><span id="phone-karma">0</span> karma</span>
+        </header>
+        <canvas id="phone-map" width="520" height="540"></canvas>
+        <div class="phone-turn">
+          <span class="phone-icon" id="phone-icon" aria-hidden="true"></span>
+          <p id="phone-turn"></p>
+        </div>
+        <div class="phone-card">
+          <p class="phone-where" id="phone-where"></p>
+          <p class="phone-stall"><span id="phone-stall"></span> <span id="phone-walk"></span></p>
+          <p class="phone-open"><span id="phone-spots">0</span> open spots nearby</p>
+        </div>
+        <div class="phone-places" id="phone-places"></div>
+      </div>
+    </aside>
 
     <div class="guide" id="nav" role="status" hidden>
       <div class="guide-inner">

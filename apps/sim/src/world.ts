@@ -125,6 +125,8 @@ export interface DemandItem {
   at: number;
   nav: NavMode;
   sharesGps: boolean;
+  /** Keep this nav mode even in the live city, where modes are normally rolled on arrival. */
+  fixedNav?: boolean;
   destinationId: string;
   startEdge: DirectedEdge;
   variant: number;
@@ -360,6 +362,21 @@ export class World {
     this.parking = service;
   }
 
+  /** Sends a burst of drivers to one place, for scenarios like a movie letting out. */
+  addSurge(destinationId: string, count: number, spanSeconds: number) {
+    const items = World.makeDemand(this.city, Math.floor(this.time) + 7, count, spanSeconds, {
+      guided: this.guidance ? this.networkShare : 0,
+      autopilot: this.guidance ? this.autopilotShare : 0,
+      gps: this.gpsShare,
+      destinations: [destinationId],
+    });
+    for (const item of items) {
+      item.at += this.time;
+      item.fixedNav = true;
+    }
+    this.setDemand([...this.demand, ...items]);
+  }
+
   /** Adds or removes survey cars to reach a count. */
   setScoutCount(count: number) {
     const scouts = [...this.cars.values()].filter((c) => c.role === 'scout');
@@ -414,7 +431,7 @@ export class World {
   }
 
   private spawnDriver(item: DemandItem) {
-    const nav = this.keepCarsInCity ? this.rollNav() : item.nav;
+    const nav = this.keepCarsInCity && !item.fixedNav ? this.rollNav() : item.nav;
     const car = this.blankCar(nav === 'self' ? 'manual' : 'network', item.startEdge, item.variant, item.color);
     car.nav = nav;
     car.sharesGps = this.keepCarsInCity ? nav !== 'self' || this.rng() < this.gpsShare : item.sharesGps;

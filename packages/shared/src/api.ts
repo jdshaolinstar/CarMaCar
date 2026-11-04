@@ -79,6 +79,8 @@ export interface TwinSnapshot {
   traffic: Record<string, number>;
   /** Vehicles cameras counted on streets, which GPS alone would miss. */
   cameraTrafficCounts: number;
+  /** Streets an operator goal is steering cars away from. */
+  avoidedStreets: string[];
 }
 
 export interface FindParkingRequest {

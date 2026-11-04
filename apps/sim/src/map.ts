@@ -89,6 +89,15 @@ export class LiveMap {
       ctx.moveTo(...this.px(nodeById.get(s.a)!));
       ctx.lineTo(...this.px(nodeById.get(s.b)!));
       ctx.stroke();
+      if (twin?.avoidedStreets?.includes(s.street)) {
+        // A goal, not traffic, so it gets its own look.
+        ctx.strokeStyle = '#7CC4FF';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 15;
+      }
     }
 
     ctx.textAlign = 'center';

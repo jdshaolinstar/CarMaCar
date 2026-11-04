@@ -2,6 +2,7 @@
 import { distance, dot, generateCity, rightOf, scale, type AgentEvent, type CameraPose, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { navigate } from './nav';
+import { PhoneApp } from './phone';
 import { PlatformClient } from './platform';
 import { CityScene, type CameraView } from './scene';
 import { renderSystems, type SystemDef } from './systems';
@@ -19,6 +20,17 @@ const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
+/** Set by the stolen stall playbook: the next stall the trip agent reserves gets taken. */
+let stealNextPlannedStall = false;
+
+interface Playbook {
+  id: string;
+  title: string;
+  description: string;
+  watch: string;
+  run(): void;
+}
+
 let tesOn = true;
 let smartLightsOn = false;
 let lightsOn = true;
@@ -136,10 +148,14 @@ async function takePhoto() {
   inFlight++;
   if (fromCar) fromCar.car.metersSinceCapture = 0;
   try {
-    const dataUrl = await scene.captureFrame(pose);
+    // Truth is copied at the moment of rendering, so a reading is judged on what the photo showed.
+    let truth = new Set<string>();
+    const dataUrl = await scene.captureFrame(pose, () => {
+      truth = new Set(world.stallOwner.keys());
+    });
     const capturedAt = Date.now();
     frameImages.set(`${scoutId}:${capturedAt}`, dataUrl);
-    truthAtCapture.set(`${scoutId}:${capturedAt}`, new Set(world.stallOwner.keys()));
+    truthAtCapture.set(`${scoutId}:${capturedAt}`, truth);
     if (frameImages.size > 16) frameImages.delete(frameImages.keys().next().value!);
     const ok = await platform.sendFrame({
       scoutId,
@@ -261,6 +277,10 @@ function applyTrips() {
     appliedPlans.set(plan.tripId, signature);
     world.applyPlan(car, plan);
     highlight = plan.legs[0]?.stallId ?? null;
+    if (stealNextPlannedStall && highlight) {
+      stealNextPlannedStall = false;
+      toggleStallCar(highlight);
+    }
   }
 }
 
@@ -513,7 +533,168 @@ systemsButton.addEventListener('click', () => {
   const panel = $('systems');
   panel.hidden = !panel.hidden;
   systemsButton.setAttribute('aria-pressed', String(!panel.hidden));
+  if (!panel.hidden) {
+    $('playbooks').hidden = true;
+    $('playbooks-open').setAttribute('aria-pressed', 'false');
+  }
 });
+
+// ---- Playbooks: one click sets up a scenario worth showing. ----
+
+function setSystem(id: string, value: boolean | number | string) {
+  const system = systems.find((s) => s.id === id);
+  if (system) system.control.value = value as never;
+  applySystem(id, value);
+}
+
+function openStreets() {
+  for (const stall of city.stalls) {
+    if (Math.random() < 0.5) world.removeCarFromStall(stall.id);
+  }
+}
+
+const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
+
+const playbooks: Playbook[] = [
+  {
+    id: 'surge-off',
+    title: 'Movie theater surge, no TES',
+    description: 'Spiderdude just let in. 70 cars head for Galaxy Cinema with no coordination, circling for spaces.',
+    watch: 'Queues build around the cinema while the garages sit half empty.',
+    run() {
+      setSystem('tes', false);
+      setSystem('smartLights', false);
+      world.addSurge(cinema.id, 70, 60);
+    },
+  },
+  {
+    id: 'surge-on',
+    title: 'Movie theater surge, with TES',
+    description: 'The same 70 cars, but TES spreads them across streets and garages before they arrive.',
+    watch: 'Cars peel off to different stalls and garages. Compare with the run without TES.',
+    run() {
+      setSystem('tes', true);
+      setSystem('smartLights', true);
+      setSystem('network', 0.4);
+      setSystem('autopilot', 0.4);
+      world.addSurge(cinema.id, 70, 60);
+    },
+  },
+  {
+    id: 'autopilot',
+    title: 'Self-driving city',
+    description: 'Nearly every car follows TES on autopilot, with smart lights.',
+    watch: 'Tighter gaps and quicker starts at each light.',
+    run() {
+      setSystem('tes', true);
+      setSystem('smartLights', true);
+      setSystem('network', 0.05);
+      setSystem('autopilot', 0.95);
+      world.addSurge(cinema.id, 30, 90);
+    },
+  },
+  {
+    id: 'parade',
+    title: 'Parade on Market St',
+    description: 'A plain-language goal goes to the Muse Spark city operator, which steers TES away from a street.',
+    watch: 'Market St turns dashed blue on the map. Connected cars route around it.',
+    run() {
+      setSystem('tes', true);
+      ($('operator-text') as HTMLInputElement).value = "There's a parade on Market St tonight. Keep cars away from it.";
+      $('operator').dispatchEvent(new Event('submit', { cancelable: true }));
+    },
+  },
+  {
+    id: 'stolen-stall',
+    title: 'Someone takes your stall',
+    description: 'Your car gets a stall from the trip agent. A car takes it. Only a camera can reveal that.',
+    watch: 'The map still says free, then a camera sees it and the agent moves you to another stall.',
+    run() {
+      setSystem('tes', true);
+      const input = $('trip-text') as HTMLInputElement;
+      input.value = 'Take me to Trattoria Luna and find parking';
+      selectCar(hero.id);
+      $('trip').dispatchEvent(new Event('submit', { cancelable: true }));
+      stealNextPlannedStall = true;
+    },
+  },
+  {
+    id: 'no-cameras',
+    title: 'What GPS alone misses',
+    description: 'Camera vision goes off. GPS still shows connected cars, but no one can see parking or anyone else.',
+    watch: 'The parking map freezes while traffic keeps changing around it.',
+    run() {
+      setSystem('vision', false);
+      setSystem('garageCameras', false);
+    },
+  },
+  {
+    id: 'quiet',
+    title: 'Back to normal',
+    description: 'Resets every system to its default.',
+    watch: 'A typical evening with a mix of drivers.',
+    run() {
+      setSystem('vision', true);
+      setSystem('garageCameras', true);
+      setSystem('tes', true);
+      setSystem('smartLights', false);
+      setSystem('network', 0.4);
+      setSystem('autopilot', 0.3);
+    },
+  },
+];
+
+function runPlaybook(playbook: Playbook) {
+  playbook.run();
+  renderSystems($('systems-list'), systems, applySystem);
+  $('playbook-title').textContent = `Running: ${playbook.title}`;
+  $('playbook-watch').textContent = `Watch for: ${playbook.watch}`;
+  $('playbook-now').hidden = false;
+}
+
+function renderPlaybooks() {
+  const list = $('playbook-list');
+  list.replaceChildren();
+  for (const playbook of playbooks) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const title = document.createElement('b');
+    title.textContent = playbook.title;
+    const text = document.createElement('span');
+    text.textContent = playbook.description;
+    button.append(title, text);
+    button.addEventListener('click', () => runPlaybook(playbook));
+    list.append(button);
+  }
+}
+renderPlaybooks();
+
+const playbooksButton = $('playbooks-open');
+playbooksButton.addEventListener('click', () => {
+  const panel = $('playbooks');
+  panel.hidden = !panel.hidden;
+  playbooksButton.setAttribute('aria-pressed', String(!panel.hidden));
+  if (!panel.hidden) {
+    $('systems').hidden = true;
+    $('systems-open').setAttribute('aria-pressed', 'false');
+  }
+});
+
+// The driver's phone.
+const phone = new PhoneApp($('phone-map') as HTMLCanvasElement, city, world);
+phone.renderDestinations($('phone-places'), (name) => {
+  ($('trip-text') as HTMLInputElement).value = `Take me to ${name} and find parking`;
+  $('trip').dispatchEvent(new Event('submit', { cancelable: true }));
+});
+const phoneButton = $('phone-open');
+phoneButton.addEventListener('click', () => {
+  const panel = $('phone');
+  panel.hidden = !panel.hidden;
+  phoneButton.setAttribute('aria-pressed', String(!panel.hidden));
+});
+setInterval(() => {
+  if (!$('phone').hidden) phone.update(world.cars.get(selectedId), twin);
+}, 250);
 
 // Driving by hand.
 const keys = new Set<string>();

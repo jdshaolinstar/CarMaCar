@@ -141,6 +141,49 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .range output { width: 38px; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
 .system select { background: var(--asphalt-raised); color: var(--line-white); border: 1px solid #59626a; border-radius: 4px; padding: 4px; font: inherit; }
 
+.playbook-now { border-left: 4px solid var(--curb-green); padding-left: 10px; margin: 8px 0 10px; }
+.playbook-now p:first-child { font-weight: 600; }
+.playbook-now .hint { margin-top: 2px; }
+.playbook-list { display: grid; gap: 6px; }
+.playbook-list button { display: block; width: 100%; text-align: left; background: var(--asphalt-raised); padding: 8px 10px 6px; }
+.playbook-list button:hover { background: #4a535a; }
+.playbook-list b { display: block; font-weight: 600; }
+.playbook-list span { display: block; font-weight: 400; font-size: 13px; color: var(--muted); line-height: 1.3; }
+
+/* The phone is a light-theme app, so it reads as a separate product from the dashboard. */
+.phone {
+  position: fixed;
+  top: 96px;
+  left: 826px;
+  width: 268px;
+  padding: 10px 8px;
+  background: #15181b;
+  border-radius: 30px;
+  box-shadow: 0 0 0 2px #3a4146;
+}
+
+.phone-screen {
+  background: #ffffff;
+  color: #1f2428;
+  border-radius: 22px;
+  overflow: hidden;
+  font-size: 13.5px;
+}
+
+.phone-bar { display: flex; align-items: center; gap: 7px; padding: 9px 12px 7px; background: var(--sign-blue); color: #fff; }
+.phone-mark { font-weight: 800; border: 2px solid #fff; border-radius: 4px; padding: 1px 6px 0; line-height: 1.2; }
+.phone-karma { margin-left: auto; font-size: 12.5px; }
+#phone-map { display: block; width: 100%; height: auto; background: #eef0ec; }
+.phone-turn { display: flex; align-items: center; gap: 10px; padding: 7px 12px 5px; background: #0f6b3c; color: #fff; min-height: 50px; }
+.phone-icon { font-size: 26px; font-weight: 800; line-height: 1; }
+.phone-turn p { font-weight: 600; line-height: 1.2; }
+.phone-card { padding: 8px 12px 4px; }
+.phone-where { font-size: 16px; font-weight: 800; }
+.phone-stall, .phone-open { color: #4d565c; }
+.phone-places { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 12px 12px; }
+.phone-places button { background: #eaf1fb; color: var(--sign-blue); border: 0; border-radius: 14px; padding: 5px 9px 3px; font-size: 12.5px; }
+.phone-places button:hover { background: #d5e4f8; }
+
 .drive-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .drive-row .hint { margin: 0; }
 

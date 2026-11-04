@@ -104,6 +104,13 @@ export class TrafficEngine {
     this.load = load;
   }
 
+  /** How much longer a street takes than in free-flowing traffic. Ignores operator goals. */
+  congestion(edge: DirectedEdge, now: number): number {
+    const seg = this.graph.segmentBetween(edge.from, edge.to);
+    const penalty = this.streetPenalties.get(seg.street) ?? 0;
+    return (this.edgeSeconds(edge, now) - penalty) / (seg.length / FREE_SPEED);
+  }
+
   /** Estimated seconds to drive a street right now. */
   edgeSeconds(edge: DirectedEdge, now: number): number {
     this.refreshLoad(now);
