@@ -12,6 +12,8 @@ import {
   type FindParkingResponse,
   type FrameUpload,
   type OperatorRequest,
+  type ResidentReply,
+  type ResidentRequest,
   type RouteReply,
   type RouteRequest,
   type TelemetryReply,
@@ -25,6 +27,7 @@ import Fastify from 'fastify';
 import OpenAI from 'openai';
 import { runTripAgent } from './agent';
 import { runOperator } from './operator';
+import { decideNextTrip } from './resident';
 import { runStrategistCycle } from './strategist';
 import { Twin } from './twin';
 import { SamProvider } from './vision/sam';
@@ -360,6 +363,19 @@ app.post<{ Params: { id: string }; Body: OperatorRequest }>('/v1/sessions/:id/op
   if (!text || text.length > 400) return reply.code(400).send({ error: 'Request must be 1 to 400 characters' });
   void runOperator(text, { client, model: AGENT_MODEL, city, twin, onTokens: (tokens) => addSpend(tokens * AGENT_USD_PER_TOKEN) });
   return { ok: true };
+});
+
+app.post<{ Params: { id: string }; Body: ResidentRequest }>('/v1/sessions/:id/resident', async (req, reply) => {
+  const twin = getTwin(req.params.id);
+  if (!twin) return reply.code(404).send({ error: 'Unknown session' });
+  if (budgetExhausted()) return reply.code(429).send({ error: 'Daily budget reached' });
+  const { name, persona, lastPlace } = req.body;
+  const choice = await decideNextTrip(client, AGENT_MODEL, city, name, persona, lastPlace, (tokens) =>
+    addSpend(tokens * AGENT_USD_PER_TOKEN),
+  ).catch(() => null);
+  if (!choice) return reply.code(502).send({ error: 'Resident could not decide' });
+  twin.addEvent({ tripId: 'resident', kind: 'reply', detail: `${name}: "${choice.thought}"` });
+  return choice satisfies ResidentReply;
 });
 
 app.addHook('onClose', async () => sessions.clear());

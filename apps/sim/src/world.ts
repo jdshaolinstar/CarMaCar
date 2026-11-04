@@ -81,6 +81,8 @@ export interface Car {
   mergedAt: number;
   /** The route the Traffic Efficiency System recommends, for directions while driving by hand. */
   tesChain: DirectedEdge[] | null;
+  /** Set when Muse Spark is playing this car's driver. */
+  residentName: string | null;
   /** Set while a person is driving this car. */
   control: { throttle: number; steer: number } | null;
   spawnedAt: number;
@@ -354,6 +356,7 @@ export class World {
       merging: false,
       mergedAt: -Infinity,
       control: null,
+      residentName: null,
       tesChain: null,
       spawnedAt: this.time,
       meters: 0,

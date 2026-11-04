@@ -21,6 +21,7 @@ const parkedShare = Number(params.get('parked') ?? 0.62);
 let timeScale = Number(params.get('speed') ?? 1);
 let visionOn = true;
 let garageVisionOn = true;
+const RESIDENT_REST_MS = 45_000;
 let trashScanOn = true;
 let parkingVision: ParkingVision = 'sam';
 let trashVision: TrashVision = 'spark';
@@ -364,7 +365,8 @@ let currentView: CameraView = 'city';
 function describeCar(car: Car): string {
   const navText = { self: 'plots its own route', guided: 'TES guided', autopilot: 'TES autopilot' }[car.nav];
   const roleText = { hero: 'Your car', scout: 'Survey car', network: 'Driver', manual: 'Driver', parked: 'Parked car' }[car.role];
-  const kind = `${roleText}, ${navText}${car.sharesGps ? ', sharing GPS' : ''}`;
+  const who = car.residentName ? `${car.residentName}, an AI resident` : roleText;
+  const kind = `${who}, ${navText}${car.sharesGps ? ', sharing GPS' : ''}`;
   const place = city.destinations.find((d) => d.id === car.destinationId);
   return place ? `${kind}, heading to ${place.name}` : kind;
 }
@@ -553,6 +555,14 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: true },
   },
   {
+    id: 'residents',
+    name: 'AI residents',
+    description: 'Maya, Dev and Rosa decide their own evenings, then use the app like anyone else.',
+    layer: 'simulation',
+    engine: 'Meta Muse Spark',
+    control: { type: 'toggle', value: false },
+  },
+  {
     id: 'lights',
     name: 'Traffic lights',
     description: 'Timed lights at every intersection.',
@@ -607,6 +617,10 @@ function applySystem(id: string, value: boolean | number | string) {
     $('map-note').hidden = visionOn;
   } else if (id === 'garageCameras') garageVisionOn = value as boolean;
   else if (id === 'trash') trashScanOn = value as boolean;
+  else if (id === 'residents') {
+    residentsOn = value as boolean;
+    if (residentsOn) assignResidents();
+  }
   else if (id === 'strategist') {
     strategistOn = value as boolean;
     syncTes();
@@ -673,6 +687,16 @@ function openStreets() {
 const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
+  {
+    id: 'residents',
+    title: 'Meet the residents',
+    description: 'Muse Spark plays Maya, Dev and Rosa, who decide where to go next and ask the app for a trip.',
+    watch: 'Their thoughts appear in the log. Each one then goes through the real trip agent.',
+    run() {
+      setSystem('tes', true);
+      setSystem('residents', true);
+    },
+  },
   {
     id: 'cleanup',
     title: 'Clean up the block',
@@ -848,6 +872,45 @@ resultsButton.addEventListener('click', () => {
     }
   }
 });
+
+// AI residents: a few people played by Muse Spark, who decide their own evenings.
+const RESIDENTS = [
+  { name: 'Maya', persona: 'A nurse just off a long shift, hungry, loves noodles, and avoids crowds.' },
+  { name: 'Dev', persona: 'A film nerd who never misses an opening night and always wants coffee first.' },
+  { name: 'Rosa', persona: 'A retired teacher running errands, who chats with everyone at the grocery store.' },
+];
+const residentCars = new Map<string, { name: string; persona: string; car: Car; busy: boolean; lastPlace: string | null }>();
+let residentsOn = false;
+
+function assignResidents() {
+  const drivers = [...world.cars.values()].filter((c) => c.role === 'parked' && !c.insideGarage && c.phase === 'parked');
+  RESIDENTS.forEach((resident, i) => {
+    const car = drivers[i * 7];
+    if (!car || residentCars.has(resident.name)) return;
+    car.residentName = resident.name;
+    car.leaveAt = Infinity;
+    world.setNavMode(car, 'guided');
+    residentCars.set(resident.name, { ...resident, car, busy: false, lastPlace: null });
+  });
+}
+
+async function runResidents() {
+  if (!platform || !residentsOn) return;
+  for (const resident of residentCars.values()) {
+    const { car } = resident;
+    // A resident thinks about what's next once they have arrived somewhere.
+    if (resident.busy || car.phase !== 'parked' || !world.cars.has(car.id)) continue;
+    resident.busy = true;
+    const place = city.destinations.find((d) => d.id === car.destinationId)?.name ?? null;
+    const choice = await platform.askResident({ name: resident.name, persona: resident.persona, lastPlace: place });
+    if (choice) {
+      resident.lastPlace = place;
+      await platform.requestTrip({ carId: car.id, text: choice.request, position: car.pos });
+    }
+    setTimeout(() => (resident.busy = false), RESIDENT_REST_MS);
+  }
+}
+setInterval(() => void runResidents(), 5000);
 
 // The driver's phone.
 const phone = new PhoneApp($('phone-map') as HTMLCanvasElement, city, world);

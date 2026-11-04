@@ -3,6 +3,8 @@ import type {
   DirectedEdge,
   FindParkingResponse,
   FrameUpload,
+  ResidentReply,
+  ResidentRequest,
   RouteReply,
   TelemetryReply,
   TesSettings,
@@ -68,6 +70,11 @@ export class PlatformClient implements ParkingService {
 
   async telemetry(vehicles: VehicleReport[]): Promise<TelemetryReply | null> {
     const res = await fetch(this.url('/telemetry'), json({ vehicles }));
+    return res.ok ? res.json() : null;
+  }
+
+  async askResident(request: ResidentRequest): Promise<ResidentReply | null> {
+    const res = await fetch(this.url('/resident'), json(request));
     return res.ok ? res.json() : null;
   }
 

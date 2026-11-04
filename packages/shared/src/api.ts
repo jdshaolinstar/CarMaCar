@@ -143,3 +143,14 @@ export interface TesSettings {
 export interface OperatorRequest {
   text: string;
 }
+
+export interface ResidentRequest {
+  name: string;
+  persona: string;
+  lastPlace: string | null;
+}
+
+export interface ResidentReply {
+  thought: string;
+  request: string;
+}

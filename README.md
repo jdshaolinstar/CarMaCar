@@ -95,6 +95,7 @@ How much these numbers can be trusted depends on the simulated human drivers, wh
 | Trash detection | Production. Runs on Meta Muse Spark or SAM 3.1, your choice. |
 | Traffic Efficiency System routing, smart lights | Production. Deterministic code, steered by the Strategist. |
 | City, cars, drivers, pedestrians, survey cars | Simulation. Scripted, with no AI. |
+| AI residents | Simulation. Muse Spark plays people who choose their own trips. |
 | Self-driving | Simulation. A stand-in for a real autopilot. |
 
 ## Run it yourself
