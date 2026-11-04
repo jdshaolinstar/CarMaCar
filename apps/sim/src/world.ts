@@ -104,6 +104,8 @@ export interface Walker {
   heading: Vec2;
   /** Litter this person is heading for. */
   targetLitter: string | null;
+  /** Set while a person at the keyboard is walking as this pedestrian. */
+  input: { forward: number; turn: number } | null;
 }
 
 export type LitterKind = 'bag' | 'box' | 'can';
@@ -176,6 +178,9 @@ const HARD_BRAKING = 8;
 
 const CLAIM_MARGIN = 2;
 const PICKUP_REACH = 0.9;
+const PLAYER_PICKUP_REACH = 2.2;
+const WALK_SPEED = 3.2;
+const WALK_TURN_RATE = 2.2;
 const KARMA_PER_PICKUP = 10;
 const LITTER_CHANCE_PER_SECOND = 0.03;
 const SAMARITAN_REACH = 45;
@@ -426,6 +431,7 @@ export class World {
         pos: ring.corners[0],
         heading: { x: 1, z: 0 },
         targetLitter: null,
+        input: null,
       });
     }
   }
@@ -446,6 +452,10 @@ export class World {
 
   private tickWalkers(dt: number) {
     for (const w of this.walkers) {
+      if (w.input) {
+        this.walkByHand(w, dt);
+        continue;
+      }
       if (w.role === 'samaritan' && this.samaritansEnabled) this.chooseLitter(w);
       const target = w.targetLitter ? this.litter.get(w.targetLitter) : null;
       if (w.targetLitter && !target) w.targetLitter = null;
@@ -473,6 +483,55 @@ export class World {
         this.addLitter(pointOnRing(w.ring, w.s, (this.rng() - 0.5) * 1.6));
       }
     }
+  }
+
+  private walkByHand(w: Walker, dt: number) {
+    const { forward, turn } = w.input!;
+    const angle = turn * WALK_TURN_RATE * dt;
+    const right = rightOf(w.heading);
+    const turned = add(scale(w.heading, Math.cos(angle)), scale(right, Math.sin(angle)));
+    w.heading = turned;
+    const next = add(w.pos, scale(turned, forward * WALK_SPEED * dt));
+    if (this.isDrivable(next) || this.isWalkableSidewalk(next)) w.pos = next;
+  }
+
+  /** Sidewalks reach a little further than a car can. */
+  private isWalkableSidewalk(point: Vec2): boolean {
+    return this.city.sidewalks.some((ring) => {
+      const xs = ring.corners.map((c) => c.x);
+      const zs = ring.corners.map((c) => c.z);
+      const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+      const inside = point.x >= x0 - 1.2 && point.x <= x1 + 1.2 && point.z >= z0 - 1.2 && point.z <= z1 + 1.2;
+      const core = point.x > x0 + 1.2 && point.x < x1 - 1.2 && point.z > z0 + 1.2 && point.z < z1 - 1.2;
+      return inside && !core;
+    });
+  }
+
+  /** Lets a person walk as one of the pedestrians. */
+  takeWalker(): Walker | null {
+    const w = this.walkers.find((x) => x.role === 'walker') ?? null;
+    if (w) {
+      w.input = { forward: 0, turn: 0 };
+      w.targetLitter = null;
+      w.color = '#FF8A1F';
+    }
+    return w;
+  }
+
+  releaseWalker(w: Walker) {
+    w.input = null;
+  }
+
+  /** Picks up the nearest trash within arm's reach. Returns the karma earned. */
+  pickUpLitter(w: Walker): number {
+    for (const item of this.litter.values()) {
+      if (distance(item.pos, w.pos) < PLAYER_PICKUP_REACH) {
+        this.litter.delete(item.id);
+        this.cleanupKarma += KARMA_PER_PICKUP;
+        return KARMA_PER_PICKUP;
+      }
+    }
+    return 0;
   }
 
   /** A good samaritan heads for the nearest pin the network reported on their block. */

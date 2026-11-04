@@ -7,7 +7,7 @@ import { PlatformClient } from './platform';
 import { CityScene, type CameraView } from './scene';
 import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
-import { World, type Car, type NavMode, CAR_COLORS } from './world';
+import { World, type Car, type NavMode, type Walker, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') ?? 11);
@@ -853,6 +853,11 @@ let driving = false;
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   keys.add(e.code);
+  if (walker) {
+    if (e.code.startsWith('Arrow')) e.preventDefault();
+    if (e.code === 'KeyE') world.pickUpLitter(walker);
+    return;
+  }
   if (!driving) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   const car = world.cars.get(selectedId);
@@ -926,6 +931,60 @@ function updateNav() {
 }
 setInterval(updateNav, 400);
 
+// On foot, cleaning up.
+let walker: Walker | null = null;
+const walkButton = $('walk');
+
+function setWalking(on: boolean) {
+  if (on && driving) setDriving(false);
+  if (on) {
+    walker = world.takeWalker();
+  } else if (walker) {
+    world.releaseWalker(walker);
+    walker = null;
+  }
+  scene.followWalker(walker);
+  walkButton.setAttribute('aria-pressed', String(!!walker));
+  walkButton.textContent = walker ? 'Stop walking' : 'Walk and clean';
+  $('walk-help').hidden = !walker;
+  if (!walker) $('nav').hidden = true;
+  walkButton.blur();
+}
+walkButton.addEventListener('click', () => setWalking(!walker));
+
+function readWalkKeys() {
+  if (!walker?.input) return;
+  const up = keys.has('ArrowUp') || keys.has('KeyW');
+  const down = keys.has('ArrowDown') || keys.has('KeyS');
+  const left = keys.has('ArrowLeft') || keys.has('KeyA');
+  const right = keys.has('ArrowRight') || keys.has('KeyD');
+  walker.input.forward = Number(up) - Number(down) * 0.5;
+  walker.input.turn = Number(right) - Number(left);
+}
+
+/** Points the walker at the nearest trash that cameras have reported. */
+function updateWalkGuide() {
+  if (!walker) return;
+  const pins = twin?.trashPins ?? [];
+  $('nav').hidden = false;
+  if (pins.length === 0) {
+    $('nav-icon').textContent = '\u2691';
+    $('nav-distance').textContent = 'All clear';
+    $('nav-instruction').textContent = 'No trash reported nearby';
+    return;
+  }
+  const from = walker.pos;
+  const pin = [...pins].sort((a, b) => distance(a, from) - distance(b, from))[0];
+  const to = { x: pin.x - from.x, z: pin.z - from.z };
+  const ahead = dot(to, walker.heading);
+  const side = dot(to, rightOf(walker.heading));
+  const metres = Math.round(distance(pin, from));
+  $('nav-icon').textContent = ahead > Math.abs(side) ? '\u2191' : side > 0 ? '\u2192' : '\u2190';
+  $('nav-distance').textContent = `${metres} m`;
+  $('nav-instruction').textContent = metres < 3 ? 'Press E to pick it up' : `Trash reported: ${pin.category}`;
+}
+setInterval(updateWalkGuide, 300);
+
 $('operator').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $('operator-text') as HTMLInputElement;
@@ -948,6 +1007,7 @@ $('trip').addEventListener('submit', async (e) => {
 
 scene.start((dt) => {
   readControls();
+  readWalkKeys();
   world.tick(dt * timeScale);
   map.draw(twin, world, highlight, selectedId, route);
 });

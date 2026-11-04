@@ -22,7 +22,7 @@ import {
 } from '@babylonjs/core';
 import { add, pointOnRing, rightOf, scale, SPACING_X, SPACING_Z, type CameraPose, type CityMap, type StallState, type Vec2 } from '@carmacar/shared';
 import type { LightState } from './signals';
-import { LIFT_SECONDS, type Car, type LitterKind, type World } from './world';
+import { LIFT_SECONDS, type Car, type LitterKind, type Walker, type World } from './world';
 
 export type CameraView = 'city' | 'chase' | 'dash';
 
@@ -104,6 +104,7 @@ export class CityScene {
   private readonly stallMaterials: Record<StallState, StandardMaterial>;
   private followId: string | null = null;
   private view: CameraView = 'city';
+  private followedWalker: Walker | null = null;
   private readonly walkerMeshes = new Map<string, InstancedMesh>();
   private readonly litterMeshes = new Map<string, InstancedMesh>();
   private litterTemplates!: Record<LitterKind, Mesh>;
@@ -882,7 +883,22 @@ export class CityScene {
     this.scene.activeCamera = view === 'city' ? this.overview : this.chase;
   }
 
+  /** Follows a person on foot, or stops following. */
+  followWalker(walker: Walker | null) {
+    this.followedWalker = walker;
+    this.scene.activeCamera = walker ? this.chase : this.followId ? this.chase : this.overview;
+  }
+
   private updateChase() {
+    const w = this.followedWalker;
+    if (w) {
+      const eye = add(w.pos, scale(w.heading, -4.4));
+      const y = this.city.sidewalkHeight;
+      this.chase.position.set(eye.x, y + 2.6, eye.z);
+      const look = add(w.pos, scale(w.heading, 8));
+      this.chase.setTarget(new Vector3(look.x, y + 1, look.z));
+      return;
+    }
     const car = this.followId ? this.world.cars.get(this.followId) : null;
     if (!car) return;
     const floor = this.carHeight(car);

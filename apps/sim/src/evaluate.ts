@@ -115,6 +115,7 @@ export class TesService implements ParkingService {
       destination,
       (s) => !this.snapshot.has(s.id) && !held.has(s.id) && !exclude.includes(s.id),
       world.time,
+      carId,
     );
     if (stall) this.reservations.set(carId, stall.id);
     return stall?.id ?? null;

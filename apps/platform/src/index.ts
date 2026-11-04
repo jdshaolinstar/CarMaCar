@@ -267,7 +267,7 @@ app.post<{ Params: { id: string }; Body: FindParkingRequest }>('/v1/sessions/:id
   // With the Traffic Efficiency System on, the choice weighs traffic on the way as well as the walk.
   const chosen =
     twin.tesEnabled && req.body.edge
-      ? twin.tes.chooseStall(req.body.edge, destination, (s) => twin.available(s, exclude), Date.now() / 1000)
+      ? twin.tes.chooseStall(req.body.edge, destination, (s) => twin.available(s, exclude), Date.now() / 1000, req.body.carId)
       : null;
   const found = chosen
     ? { stall: chosen, walkMeters: Math.round(distance(chosen.center, destination)) }

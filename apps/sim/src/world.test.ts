@@ -333,6 +333,21 @@ test('self-routed drivers use garages once they give up on the street', () => {
   assert.ok(inGarage >= 5, `only ${inGarage} used a garage`);
 });
 
+test('a person on foot can walk to trash and pick it up', () => {
+  const world = new World(city, 31, null);
+  world.addWalkers(5, 0, 0);
+  const walker = world.takeWalker()!;
+  world.tick(0.05);
+  world.addLitter({ x: walker.pos.x + walker.heading.x * 1.5, z: walker.pos.z + walker.heading.z * 1.5 });
+  assert.equal(world.pickUpLitter(walker), 10);
+  assert.equal(world.litter.size, 0);
+  assert.equal(world.cleanupKarma, 10);
+  walker.input!.forward = 1;
+  const start = { ...walker.pos };
+  run(world, 2);
+  assert.notDeepEqual(walker.pos, start);
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };

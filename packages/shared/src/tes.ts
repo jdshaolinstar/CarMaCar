@@ -49,6 +49,8 @@ export class TrafficEngine {
   readonly parkingBias = new Map<string, number>();
   private readonly signalHolds = new Map<string, { axis: SignalAxis; until: number }>();
   private readonly demand = new Map<string, number[]>();
+  /** Car id to the parking area TES sent it to, while it is on the way. */
+  private readonly assignments = new Map<string, string>();
 
   constructor(
     private readonly city: CityMap,
@@ -68,6 +70,13 @@ export class TrafficEngine {
   forgetCar(carId: string) {
     this.reports.delete(carId);
     this.planned.delete(carId);
+    this.assignments.delete(carId);
+  }
+
+  private assignedTo(key: string) {
+    let count = 0;
+    for (const place of this.assignments.values()) if (place === key) count++;
+    return count;
   }
 
   private refreshLoad(now: number) {
@@ -163,10 +172,11 @@ export class TrafficEngine {
     });
     const openIn = (test: (s: Stall) => boolean) => this.city.stalls.filter((s) => test(s) && available(s)).length;
     const parking = [
-      { place: 'Street parking', open: openIn((s) => !s.garageId), steering_seconds: this.parkingBias.get('street') ?? 0 },
+      { place: 'Street parking', open: openIn((s) => !s.garageId), cars_on_the_way: this.assignedTo('street'), steering_seconds: this.parkingBias.get('street') ?? 0 },
       ...this.city.garages.map((g) => ({
         place: g.name,
         open: openIn((s) => s.garageId === g.id),
+        cars_on_the_way: this.assignedTo(g.id),
         steering_seconds: this.parkingBias.get(g.id) ?? 0,
       })),
     ];
@@ -220,7 +230,7 @@ export class TrafficEngine {
   }
 
   /** The stall with the lowest combined cost of driving there and walking on. */
-  chooseStall(start: DirectedEdge, destination: Vec2, available: (stall: Stall) => boolean, now: number): Stall | null {
+  chooseStall(start: DirectedEdge, destination: Vec2, available: (stall: Stall) => boolean, now: number, carId?: string): Stall | null {
     const seconds = this.graph.secondsFrom(start, (edge) => this.edgeSeconds(edge, now));
     let best: Stall | null = null;
     let bestScore = Infinity;
@@ -237,6 +247,7 @@ export class TrafficEngine {
         best = stall;
       }
     }
+    if (best && carId) this.assignments.set(carId, best.garageId ?? 'street');
     return best;
   }
 
