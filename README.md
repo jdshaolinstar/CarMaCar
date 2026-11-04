@@ -58,7 +58,7 @@ Every result below is from this simulation, not a real city. Real streets, weath
 
 **Vision, on rendered frames.**
 
-- Street parking: 303 of 305 stall readings correct across two live runs, in moving traffic.
+- Street parking: 303 of 305 stall readings correct across two live daytime runs, in moving traffic. 96.8% at night.
 - Garage parking: 152 of 152 readings correct, reading 90% of garage stalls in one sweep of the cameras.
 - Trash: Muse Spark found 15 items in 6 test frames, 14 of them real. SAM with the prompt "garbage bag" found 7, all real. Both are selectable in the app.
 
@@ -66,23 +66,23 @@ These frames come from a simple 3D city. Real photos will be harder, so treat th
 
 **Traffic, simulated.** Same city, same drivers, several seeds. Only how cars navigate changes.
 
-| Everyday traffic | Time to park | City driving |
-|---|---:|---:|
-| TES off | 129 s | 32.5 km |
-| TES on, 60% of cars guided | 109 s | 26.1 km |
-| TES on, 30% guided, 30% autopilot | 114 s | 25.4 km |
-| TES on, 100% autopilot | 110 s | 21.2 km |
-| 100% autopilot with smart lights | 90 s | 21.1 km |
+| Everyday traffic, 60 drivers | Drivers parked | Time to park | Walk |
+|---|---:|---:|---:|
+| TES off | 46 | 173 s | 66 m |
+| TES on, 60% of cars guided | 52 | 147 s | 48 m |
+| TES on, 30% guided, 30% autopilot | 57 | 126 s | 50 m |
+| TES on, 100% autopilot | 59 | 107 s | 45 m |
+| 100% autopilot with smart lights | 60 | 92 s | 46 m |
 
-| Movie theater surge | Drivers parked | Time to park |
-|---|---:|---:|
-| TES off | 18 | 524 s |
-| TES on, 60% of cars guided | 36 | 431 s |
-| TES on, 30% guided, 30% autopilot | 40 | 414 s |
-| TES on, 100% autopilot | 65 | 289 s |
-| 100% autopilot with smart lights | 67 | 285 s |
+| Movie theater surge, 110 drivers | Drivers parked | Time to park | Walk |
+|---|---:|---:|---:|
+| TES off | 26 | 479 s | 60 m |
+| TES on, 60% of cars guided | 38 | 422 s | 63 m |
+| TES on, 30% guided, 30% autopilot | 42 | 405 s | 65 m |
+| TES on, 100% autopilot | 64 | 296 s | 72 m |
+| 100% autopilot with smart lights | 63 | 285 s | 71 m |
 
-Four seeds each. A surge sends 110 drivers to one cinema within two minutes, so many are still searching at the end of every run, and average times include them.
+Four seeds each. In a surge, 110 drivers head for one cinema within two minutes, so many are still searching at the end of every run, and average times include them. Self-routed drivers use garages too, once they give up on the street.
 
 How much these numbers can be trusted depends on the simulated human drivers, whose search behavior is an assumption. Results and more detail are in the app under **Results**, and `apps/sim/scripts/tes-study.ts` reproduces them.
 

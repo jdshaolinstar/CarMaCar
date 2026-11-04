@@ -2,101 +2,101 @@
   {
     "scenario": "Everyday traffic",
     "mode": "TES off",
-    "parked": 59,
-    "searching": 1,
-    "seconds": 128.77958333334192,
-    "meters": 541.0869036801819,
-    "walk": 42.62799163313039,
-    "km": 32.465214220810914
+    "parked": 46,
+    "searching": 14,
+    "seconds": 173.44208333335462,
+    "meters": 319.7163057843036,
+    "walk": 65.69325572230647,
+    "km": 19.18297834705821
   },
   {
     "scenario": "Everyday traffic",
     "mode": "TES on, 60% guided",
-    "parked": 57.5,
-    "searching": 2.5,
-    "seconds": 108.53708333333923,
-    "meters": 434.34067342209124,
-    "walk": 41.09431143934521,
-    "km": 26.060440405325476
+    "parked": 52.5,
+    "searching": 7.5,
+    "seconds": 147.45583333334827,
+    "meters": 354.25536427980126,
+    "walk": 47.75789238442111,
+    "km": 21.25532185678808
   },
   {
     "scenario": "Everyday traffic",
     "mode": "TES on, 30% guided, 30% autopilot",
     "parked": 57,
     "searching": 3,
-    "seconds": 113.58458333334067,
-    "meters": 423.06877607525547,
-    "walk": 40.91374633928089,
-    "km": 25.384126564515327
+    "seconds": 126.2895833333449,
+    "meters": 347.31350330725763,
+    "walk": 49.6783639784081,
+    "km": 20.83881019843546
   },
   {
     "scenario": "Everyday traffic",
     "mode": "TES on, 100% autopilot",
     "parked": 59.25,
     "searching": 0.75,
-    "seconds": 110.45333333334078,
-    "meters": 354.1428974144587,
-    "walk": 45.4557927244197,
-    "km": 21.248573844867522
+    "seconds": 107.27958333333996,
+    "meters": 364.0765065406999,
+    "walk": 45.46470089430228,
+    "km": 21.844590392441994
   },
   {
     "scenario": "Everyday traffic",
     "mode": "Same, plus smart lights",
     "parked": 60,
     "searching": 0,
-    "seconds": 90.03541666667066,
-    "meters": 351.0980701866006,
-    "walk": 45.02649923428261,
-    "km": 21.065884211196032
+    "seconds": 92.26833333333755,
+    "meters": 369.30689633420775,
+    "walk": 45.841072452382384,
+    "km": 22.158413780052463
   },
   {
     "scenario": "Spiderdude at 8pm",
     "mode": "TES off",
-    "parked": 17.75,
-    "searching": 84.25,
-    "seconds": 524.3205325387661,
-    "meters": 220.5406793592037,
-    "walk": 54.63559186724123,
-    "km": 22.481960673843
+    "parked": 26,
+    "searching": 76,
+    "seconds": 478.50019257474844,
+    "meters": 183.83591516822798,
+    "walk": 60.24136627216305,
+    "km": 18.773249768601147
   },
   {
     "scenario": "Spiderdude at 8pm",
     "mode": "TES on, 60% guided",
-    "parked": 36.25,
-    "searching": 70.75,
-    "seconds": 431.49388913745463,
-    "meters": 259.86405590087577,
-    "walk": 62.41247403521615,
-    "km": 27.817484403979563
+    "parked": 37.5,
+    "searching": 66.25,
+    "seconds": 421.94849644432844,
+    "meters": 229.89235551875902,
+    "walk": 63.394013735014994,
+    "km": 23.91977561452536
   },
   {
     "scenario": "Spiderdude at 8pm",
     "mode": "TES on, 30% guided, 30% autopilot",
-    "parked": 39.75,
-    "searching": 67.25,
-    "seconds": 414.0690382600149,
-    "meters": 288.34384006205204,
-    "walk": 63.49439782664002,
-    "km": 30.87300172715614
+    "parked": 41.75,
+    "searching": 64.5,
+    "seconds": 404.82349893167896,
+    "meters": 243.7464233154546,
+    "walk": 64.99825844528999,
+    "km": 25.922382290368134
   },
   {
     "scenario": "Spiderdude at 8pm",
     "mode": "TES on, 100% autopilot",
-    "parked": 65,
-    "searching": 43.25,
-    "seconds": 289.29651386079234,
-    "meters": 316.5220975291246,
-    "walk": 72.13924107018059,
-    "km": 34.279440122118665
+    "parked": 63.75,
+    "searching": 44,
+    "seconds": 295.98517015395635,
+    "meters": 324.1658356106506,
+    "walk": 72.4708820529403,
+    "km": 34.944013494126494
   },
   {
     "scenario": "Spiderdude at 8pm",
     "mode": "Same, plus smart lights",
-    "parked": 66.75,
-    "searching": 39.75,
-    "seconds": 285.1407892437225,
-    "meters": 326.4142458554397,
-    "walk": 70.67136614733943,
-    "km": 34.850743856891505
+    "parked": 63.25,
+    "searching": 41.75,
+    "seconds": 285.27942766704024,
+    "meters": 307.6165754075939,
+    "walk": 70.6324646408601,
+    "km": 32.26165489964801
   }
 ]
