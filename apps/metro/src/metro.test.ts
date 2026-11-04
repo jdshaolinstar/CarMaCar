@@ -173,3 +173,11 @@ test('a generated algorithm cannot see anything but road data and Math', () => {
   assert.equal(cost({ freeSeconds: 5 } as never), 5);
   assert.throws(() => dryRun(compileAlgorithm('return 0;')), RejectedAlgorithm);
 });
+
+test('at full adoption, measuring load against TES share changes nothing', () => {
+  const { network, z } = setup();
+  const settings = { tesShare: 1, baseline: 'live-traffic' as const, sampleRate: 0.2, horizonSeconds: 7200 };
+  const plain = new MetroSim(network, z, trips(200, 1800), config(settings)).run();
+  const aware = new MetroSim(network, z, trips(200, 1800), config({ ...settings, shareAwareLoad: true })).run();
+  assert.equal(plain.meanMinutes, aware.meanMinutes);
+});

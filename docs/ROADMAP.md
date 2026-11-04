@@ -59,3 +59,28 @@ Next:
 - More compute: larger cities and more candidates per round should find more, and that is untested until someone runs it.
 - Real isolation: production would run generated code in a locked-down container, not only an allowlist.
 
+## Real places in 3D
+
+Goal: pick a location, such as downtown Los Angeles, and run the 3D sim on it.
+
+- OpenStreetMap is free under its ODbL license and has building footprints, with heights in many dense areas. It has
+  shapes, not looks, so buildings arrive plain. Colors and windows would come from our own materials, chosen by building type.
+- Paid or restricted photorealistic tiles are a different choice. Check their license before using any, because
+  storing or republishing them is often limited.
+- Buildings are the easy part. Lanes, stalls, garages and camera positions are the hard part, and they need testing
+  against SAM before any parking number carries over.
+- Hand-build one real block first. It then becomes the worked example for a Muse function that fills in a checked town
+  format from a plain request, with ordinary code building the roads.
+
+## Toward a GTA look
+
+In order of effect for the effort:
+
+1. Lighting, weather, night with headlights, reflections, and sound. These are code, and they change the feel the most.
+2. Free CC0 assets for cars, street props, textures and skies. Every asset must stay listed in the README.
+3. Blender run from scripts, for families of cars and buildings in our own style. We own the output.
+4. Paid assets last. Most licenses don't allow redistribution in a public repo, so check first.
+
+GTA itself is the work of very large teams for years. The realistic goal is a convincing street-level look in the
+places a demo goes, not a whole city at that level.
+

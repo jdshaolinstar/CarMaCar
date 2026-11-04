@@ -48,6 +48,8 @@ export interface RunConfig {
   roadCost?: (road: RoadState) => number;
   /** How many batches TES plans each reroute, so each batch sees the plans of the last. */
   tesSlices?: number;
+  /** Measure load against TES's own share of each road. Otherwise a few TES cars see every road as empty. */
+  shareAwareLoad?: boolean;
 }
 
 /** What a TES routing algorithm can see about one road at the moment it plans. */
@@ -139,6 +141,8 @@ const ACCESS_SECONDS = 180;
 const SIGNAL_SECONDS = 22;
 /** How far one driver's idea of a road's time can differ from another's. */
 const ROUTE_VARIATION = 0.25;
+/** Lower bound on TES's share of a road, so tiny adoption doesn't make every road look full. */
+const MIN_ROAD_SHARE = 0.05;
 /** Simulated time zero is 5 AM. */
 const SIM_CLOCK_START_HOUR = 5;
 
@@ -401,7 +405,8 @@ export class MetroSim {
   private fillCost(mode: RoutingMode) {
     const { cost, freeSeconds, observed, plannedVolume, n } = this;
     const weights = this.config.edgeWeights;
-    const { sampleRate, rerouteSeconds, capacityScale } = this.config;
+    const { sampleRate, rerouteSeconds, capacityScale, tesShare } = this.config;
+    const roadShare = this.config.shareAwareLoad ? Math.max(tesShare, MIN_ROAD_SHARE) : 1;
     const roadCost = this.config.roadCost ?? this.standardCost;
     const road = this.roadState;
     road.hour = SIM_CLOCK_START_HOUR + this.planningTime / 3600;
@@ -411,7 +416,7 @@ export class MetroSim {
         seconds = observed[e];
       } else if (mode === 'coordinated') {
         // Planned traffic, not only traffic already there, and each car's effect on the cars behind it.
-        const capacity = (n.edgeCapacity[e] * sampleRate * capacityScale * rerouteSeconds) / 3600;
+        const capacity = (n.edgeCapacity[e] * sampleRate * capacityScale * roadShare * rerouteSeconds) / 3600;
         road.freeSeconds = freeSeconds[e];
         road.liveSeconds = observed[e];
         road.load = plannedVolume[e] / Math.max(capacity, 0.01);

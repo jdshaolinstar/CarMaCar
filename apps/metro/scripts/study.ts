@@ -11,7 +11,7 @@ const FRAME_MINUTES = 10;
 export const HORIZON_HOURS = 6.5;
 const OUT = new URL('../data/runs/', import.meta.url);
 
-const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: number; tesParking: boolean }> = {
+const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: number; tesParking: boolean; shareAware?: boolean }> = {
   shortest: { label: 'No traffic data', baseline: 'free-flow', tesShare: 0, tesParking: false },
   apps: { label: "Today's apps", baseline: 'live-traffic', tesShare: 0, tesParking: false },
   tes10: { label: '10% on TES', baseline: 'live-traffic', tesShare: 0.1, tesParking: true },
@@ -19,6 +19,8 @@ const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: num
   tes60: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
   tes100: { label: 'Everyone on TES', baseline: 'live-traffic', tesShare: 1, tesParking: true },
   lab60: { label: '60% on TES, Lab winner', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
+  tes30s: { label: '30% on TES', baseline: 'live-traffic', tesShare: 0.3, tesParking: true, shareAware: true },
+  tes60s: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true, shareAware: true },
   tes60np: { label: '60% on TES, no parking guidance', baseline: 'live-traffic', tesShare: 0.6, tesParking: false },
 };
 
@@ -57,6 +59,7 @@ for (const id of ids) {
     seed,
     roadCost: lab?.winner.code ? compileAlgorithm(lab.winner.code) : lab?.winner.params ? paramCost(lab.winner.params) : undefined,
     tesSlices: lab?.winner.params?.slices,
+    shareAwareLoad: run.shareAware,
     frameSeconds: FRAME_MINUTES * 60,
     onFrame: (f) => {
       const index = perFrame.length;
