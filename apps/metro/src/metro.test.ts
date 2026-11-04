@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildNetwork, type OsmFile } from './network';
-import { fuelPerKm, MetroSim, Router, type RunConfig, type Trip, type Zones } from './simulator';
+import { checkSource, compileAlgorithm, dryRun, RejectedAlgorithm } from './lab-sandbox';
+import { fuelPerKm, HAND_TUNED, MetroSim, paramCost, Router, type RunConfig, type Trip, type Zones } from './simulator';
 
 /** A little town: a fast road from A to D with a slow parallel route through B and C. */
 function osm(): OsmFile {
@@ -125,4 +126,50 @@ test('knowing where parking is reduces the search', () => {
   const blind = new MetroSim(network, z, trips(30, 900, true), config({ parkingStart: 0.92, horizonSeconds: 7200 })).run();
   const known = new MetroSim(network, z, trips(30, 900, true), config({ parkingStart: 0.92, tesShare: 1, horizonSeconds: 7200 })).run();
   assert.ok(known.cruisingHours <= blind.cruisingHours, `${known.cruisingHours} vs ${blind.cruisingHours}`);
+});
+
+test('an explicit copy of the hand-tuned cost routes like the built-in one', () => {
+  const { network, z } = setup();
+  const settings = { tesShare: 1, baseline: 'live-traffic' as const, sampleRate: 0.2, horizonSeconds: 7200 };
+  const standard = new MetroSim(network, z, trips(200, 1800), config(settings)).run();
+  const explicit = new MetroSim(network, z, trips(200, 1800), config({ ...settings, roadCost: paramCost(HAND_TUNED) })).run();
+  assert.ok(Math.abs(standard.meanMinutes - explicit.meanMinutes) < 0.01, `${standard.meanMinutes} and ${explicit.meanMinutes}`);
+});
+
+test('a generated algorithm can change routing, and a bad answer falls back to live traffic', () => {
+  const { network, z } = setup();
+  const settings = { tesShare: 1, baseline: 'live-traffic' as const, sampleRate: 0.2, horizonSeconds: 7200 };
+  const generated = compileAlgorithm('const crowd = 1 + 2 * Math.pow(road.load, 2);\nreturn Math.max(road.liveSeconds, road.freeSeconds * crowd);');
+  dryRun(generated);
+  assert.ok(new MetroSim(network, z, trips(200, 1800), config({ ...settings, roadCost: generated })).run().finished > 0);
+  const broken = new MetroSim(network, z, trips(50, 600), config({ ...settings, roadCost: () => NaN })).run();
+  assert.equal(broken.finished, 50);
+});
+
+test('the lab rejects anything outside its small language', () => {
+  const escapes = [
+    "return process.env.MODEL_API_KEY;",
+    "while (true) {} return 1;",
+    "for (let i = 0; i < 9; i++) {} return 1;",
+    "return this.constructor.constructor('return process')();",
+    "return road.constructor;",
+    "const f = () => 1; return f();",
+    "return require('fs');",
+    "return Math.constructor;",
+    "return road['constructor'];",
+    "return `${1}`;",
+    "return globalThis;",
+    "const a = road; return a.constructor;",
+    "function f() { return 1; } return f();",
+    "return Function('return 1')();",
+  ];
+  for (const source of escapes) assert.throws(() => checkSource(source), RejectedAlgorithm, source);
+  assert.doesNotThrow(() => checkSource('// spread traffic\nif (road.isFreeway) { return road.liveSeconds * 1.1; }\nreturn road.liveSeconds + 2.5e1 * road.load;'));
+});
+
+test('a generated algorithm cannot see anything but road data and Math', () => {
+  assert.throws(() => compileAlgorithm('return process.pid;'), RejectedAlgorithm);
+  const cost = compileAlgorithm('return Math.max(1, road.freeSeconds);');
+  assert.equal(cost({ freeSeconds: 5 } as never), 5);
+  assert.throws(() => dryRun(compileAlgorithm('return 0;')), RejectedAlgorithm);
 });

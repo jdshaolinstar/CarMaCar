@@ -13,6 +13,12 @@ interface Summary {
   nodes: number;
   edges: number;
   note: string;
+  scenarios: Scenario[];
+}
+
+interface Scenario {
+  id: string;
+  label: string;
   runs: RunSummary[];
 }
 
@@ -264,24 +270,38 @@ async function main() {
   left.setParked(parkedPoints, parkedTones);
   right.setParked(parkedPoints, parkedTones);
   const frames = new Map<string, Uint8Array>();
-  const load = async (run: RunSummary) => {
-    if (!frames.has(run.id)) frames.set(run.id, new Uint8Array(await fetchBinary(`la-run-${run.id}.bin`)));
-    return frames.get(run.id)!;
+  const load = async (scenario: Scenario, run: RunSummary) => {
+    const key = `${scenario.id}-${run.id}`;
+    if (!frames.has(key)) frames.set(key, new Uint8Array(await fetchBinary(`la-run-${key}.bin`)));
+    return frames.get(key)!;
   };
 
-  const baseline = summary.runs.find((r) => r.tesShare === 0)!;
-  const options = summary.runs.filter((r) => r.tesShare > 0);
+  const scenarioSelect = $('scenario') as HTMLSelectElement;
   const select = $('adoption') as HTMLSelectElement;
-  for (const run of options) {
-    const option = document.createElement('option');
-    option.value = run.id;
-    option.textContent = run.label;
-    select.append(option);
+  for (const item of summary.scenarios) scenarioSelect.append(new Option(item.label, item.id));
+  let scenario = summary.scenarios[0];
+  let baseline = scenario.runs[0];
+  let active = scenario.runs[scenario.runs.length - 1];
+  let leftData: Uint8Array | undefined;
+  let rightData: Uint8Array | undefined;
+
+  /** Fetches both sides first, then swaps them together, so the two maps never show different scenarios. */
+  async function showRuns() {
+    const [a, b] = await Promise.all([load(scenario, baseline), load(scenario, active)]);
+    leftData = a;
+    rightData = b;
+    showSummary();
   }
-  select.value = options[options.length - 1].id;
-  let active = options[options.length - 1];
-  await load(baseline);
-  await load(active);
+
+  function fillAdoption() {
+    const options = scenario.runs.filter((r) => r.tesShare > 0);
+    select.replaceChildren(...options.map((run) => new Option(run.label, run.id)));
+    const same = options.find((r) => r.id === active.id) ?? options[options.length - 1];
+    select.value = same.id;
+    active = same;
+  }
+  fillAdoption();
+
   $('left-name').textContent = baseline.label;
 
   function showSummary() {
@@ -305,7 +325,7 @@ async function main() {
       }),
     );
   }
-  showSummary();
+  await showRuns();
   // The written summary only exists once muse-summary.ts has run, and the page works without it.
   const museRes = await fetch(`${BASE}la-muse.json`).catch(() => null);
   if (museRes?.ok && museRes.headers.get('content-type')?.includes('json')) {
@@ -321,10 +341,15 @@ async function main() {
     );
     $('muse').hidden = false;
   }
-  select.addEventListener('change', async () => {
-    active = options.find((r) => r.id === select.value)!;
-    await load(active);
-    showSummary();
+  select.addEventListener('change', () => {
+    active = scenario.runs.find((r) => r.id === select.value)!;
+    void showRuns();
+  });
+  scenarioSelect.addEventListener('change', () => {
+    scenario = summary.scenarios.find((s) => s.id === scenarioSelect.value)!;
+    baseline = scenario.runs[0];
+    fillAdoption();
+    void showRuns();
   });
 
   const MAX_DOTS = 160000;
@@ -340,6 +365,7 @@ async function main() {
   const speedInput = $('speed') as HTMLInputElement;
   const showDots = $('dots') as HTMLInputElement;
   const showParked = $('parked') as HTMLInputElement;
+  const density = $('density') as HTMLInputElement;
 
   function fill(data: Uint8Array, frame: number, setIndex: number, clock: number) {
     const tones = roadTones[setIndex];
@@ -353,7 +379,7 @@ async function main() {
       tones[e * 2 + 1] = tone;
       if (!showDots.checked || share === 0) continue;
       // Dots stand for cars on this road. They move slower where it's crowded.
-      const cars = Math.min(40, Math.round((share * storage[e] * summary.sampleRate) + 0.35));
+      const cars = Math.min(40, Math.round(share * storage[e] * summary.sampleRate * (Number(density.value) / 100) + 0.35));
       const a = edgeNodes[e * 2] * 2;
       const b = edgeNodes[e * 2 + 1] * 2;
       for (let k = 0; k < cars && count < MAX_DOTS; k++) {
@@ -395,8 +421,6 @@ async function main() {
       timeInput.value = String(Math.round(time * 1000));
     }
     const frame = Math.min(summary.frames - 1, Math.floor(time * summary.frames));
-    const leftData = frames.get(baseline.id);
-    const rightData = frames.get(active.id);
     if (leftData && rightData) {
       const clock = now / 1000;
       const a = fill(leftData, frame, 0, clock);

@@ -34,7 +34,9 @@
       <button id="play" type="button" aria-pressed="true">Pause</button>
       <label class="wide">Time <input id="time" type="range" min="0" max="1000" value="0" aria-label="Time of morning" /></label>
       <label>Speed <input id="speed" type="range" min="1" max="20" value="6" aria-label="Playback speed" /></label>
+      <label>Traffic <select id="scenario" aria-label="Traffic level"></select></label>
       <label>TES drivers <select id="adoption" aria-label="Share of drivers on TES"></select></label>
+      <label>Dots shown <input id="density" type="range" min="10" max="100" step="10" value="100" aria-label="Share of moving dots drawn. Does not change results" /></label>
       <label class="check"><input id="dots" type="checkbox" checked />Moving cars</label>
       <label class="check"><input id="parked" type="checkbox" />Parked cars</label>
     </footer>

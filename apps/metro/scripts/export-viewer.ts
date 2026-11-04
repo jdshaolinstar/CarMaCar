@@ -1,13 +1,19 @@
 // Packs finished runs into the small files the 2D viewer plays back.
-// Run: npx tsx apps/metro/scripts/export-viewer.ts <cars> <run ids> <seed>
+// Run: node --import tsx apps/metro/scripts/export-viewer.ts <cars> <seed>
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { SIM_START_HOUR } from '../src/demand';
 import { loadNetwork } from '../src/load';
 
 const cars = Number(process.argv[2] ?? 200000);
-const ids = (process.argv[3] ?? 'apps,tes30,tes60,tes100').split(',');
-const seed = Number(process.argv[4] ?? 1);
-const tag = process.env.TAG ? `-${process.env.TAG}` : '';
+const seed = Number(process.argv[3] ?? 1);
+/** Each scenario is a finished set of runs. The viewer switches between them; it never simulates. */
+const SCENARIOS = JSON.parse(
+  process.env.SCENARIOS ??
+    JSON.stringify([
+      { id: 'typical', label: 'Typical morning', tag: 'cap2.5', runs: ['apps', 'tes30', 'tes60', 'tes100'] },
+      { id: 'heavy', label: 'Heavier traffic', tag: 'cap2.3', runs: ['apps', 'tes30', 'tes100'] },
+    ]),
+) as { id: string; label: string; tag: string; runs: string[] }[];
 const FRAME_MINUTES = 10;
 /** Very short segments add file size without changing the picture. */
 const MIN_LENGTH_METERS = 90;
@@ -56,40 +62,43 @@ places.forEach((p, i) => {
 });
 writeFileSync(new URL('la-parking.bin', out), Buffer.from(parking.buffer));
 
-const runs = [];
 let frames = 0;
 let sampleRate = 1;
 let drivers = 0;
-for (const id of ids) {
-  const name = `la-${cars}-${id}-s${seed}${tag}`;
-  const run = JSON.parse(readFileSync(new URL(`../data/runs/${name}.json`, import.meta.url), 'utf8'));
-  const raw = readFileSync(new URL(`../data/runs/${name}.bin`, import.meta.url));
-  frames = run.perFrame.length;
-  sampleRate = run.sampleRate;
-  drivers = run.peopleDriving;
-  const packed = new Uint8Array(frames * keep.length);
-  for (let f = 0; f < frames; f++) {
-    const from = f * network.edgeCount;
-    const to = f * keep.length;
-    keep.forEach((e, i) => (packed[to + i] = raw[from + e]));
-  }
-  writeFileSync(new URL(`la-run-${id}.bin`, out), packed);
-  const r = run.result;
-  runs.push({
-    id,
-    label: run.label,
-    tesShare: run.tesShare,
-    meanMinutes: r.meanMinutes,
-    rushMeanMinutes: r.rushMeanMinutes,
-    vehicleHours: r.scaled.vehicleHours,
-    delayHours: r.scaled.delayHours,
-    vehicleKm: r.scaled.vehicleKm,
-    fuelLitres: r.scaled.fuelLitres,
-    cruisingHours: r.cruisingHours / run.sampleRate,
-    finishedShare: r.finished / r.trips,
-    perFrame: run.perFrame,
-  });
-}
+const scenarios = SCENARIOS.map((scenario) => ({
+  id: scenario.id,
+  label: scenario.label,
+  runs: scenario.runs.map((id) => {
+    const name = `la-${cars}-${id}-s${seed}-${scenario.tag}`;
+    const run = JSON.parse(readFileSync(new URL(`../data/runs/${name}.json`, import.meta.url), 'utf8'));
+    const raw = readFileSync(new URL(`../data/runs/${name}.bin`, import.meta.url));
+    frames = run.perFrame.length;
+    sampleRate = run.sampleRate;
+    drivers = run.peopleDriving;
+    const packed = new Uint8Array(frames * keep.length);
+    for (let f = 0; f < frames; f++) {
+      const from = f * network.edgeCount;
+      const to = f * keep.length;
+      keep.forEach((e, i) => (packed[to + i] = raw[from + e]));
+    }
+    writeFileSync(new URL(`la-run-${scenario.id}-${id}.bin`, out), packed);
+    const r = run.result;
+    return {
+      id,
+      label: run.label,
+      tesShare: run.tesShare,
+      meanMinutes: r.meanMinutes,
+      rushMeanMinutes: r.rushMeanMinutes,
+      vehicleHours: r.scaled.vehicleHours,
+      delayHours: r.scaled.delayHours,
+      vehicleKm: r.scaled.vehicleKm,
+      fuelLitres: r.scaled.fuelLitres,
+      cruisingHours: r.cruisingHours / run.sampleRate,
+      finishedShare: r.finished / r.trips,
+      perFrame: run.perFrame,
+    };
+  }),
+}));
 
 writeFileSync(
   new URL('la-summary.json', out),
@@ -103,8 +112,8 @@ writeFileSync(
     frames,
     nodes: network.nodeCount,
     edges: keep.length,
-    note: 'Simulated morning commute. Roads (c) OpenStreetMap contributors, ODbL. Commute flows from US Census LODES 2023. Road capacity is calibrated so the baseline matches the Census average commute. Not a measurement of real traffic.',
-    runs,
+    note: 'Simulated morning commute. Roads (c) OpenStreetMap contributors, ODbL. Commute flows from US Census LODES 2023. In the typical morning, road capacity is calibrated so the baseline comes close to the Census average commute of 30.8 minutes. Modeled, not measured.',
+    scenarios,
   }),
 );
-console.log(`Wrote ${keep.length} roads, ${frames} frames, ${runs.length} runs`);
+console.log(`Wrote ${keep.length} roads, ${frames} frames, ${scenarios.length} scenarios`);

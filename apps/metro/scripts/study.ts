@@ -1,10 +1,11 @@
 // The metro study: one morning on real roads with real commute patterns, under different routing.
 // Run: npx tsx apps/metro/scripts/study.ts <city> <cars> <run ids, comma separated> [seed]
 // Each run writes its result, and playback frames for the viewer.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { sampleTrips, SIM_START_HOUR } from '../src/demand';
+import { compileAlgorithm } from '../src/lab-sandbox';
 import { loadCity } from '../src/load';
-import { MetroSim, type RoutingMode } from '../src/simulator';
+import { MetroSim, paramCost, type RoutingMode, type RoutingParams } from '../src/simulator';
 
 const FRAME_MINUTES = 10;
 export const HORIZON_HOURS = 6.5;
@@ -17,7 +18,11 @@ const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: num
   tes30: { label: '30% on TES', baseline: 'live-traffic', tesShare: 0.3, tesParking: true },
   tes60: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
   tes100: { label: 'Everyone on TES', baseline: 'live-traffic', tesShare: 1, tesParking: true },
+  lab60: { label: '60% on TES, Lab winner', baseline: 'live-traffic', tesShare: 0.6, tesParking: true },
 };
+
+/** A finished Lab session, for applying its winner at full size. Set LAB to its JSON file. */
+const lab = process.env.LAB ? (JSON.parse(readFileSync(process.env.LAB, 'utf8')) as { winner: { code?: string; params?: RoutingParams } }) : null;
 
 const city = process.argv[2] ?? 'la';
 const cars = Number(process.argv[3] ?? 200000);
@@ -49,6 +54,8 @@ for (const id of ids) {
     tesParking: run.tesParking,
     coordination,
     seed,
+    roadCost: lab?.winner.code ? compileAlgorithm(lab.winner.code) : lab?.winner.params ? paramCost(lab.winner.params) : undefined,
+    tesSlices: lab?.winner.params?.slices,
     frameSeconds: FRAME_MINUTES * 60,
     onFrame: (f) => {
       const index = perFrame.length;

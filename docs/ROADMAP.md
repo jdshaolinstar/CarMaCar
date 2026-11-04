@@ -37,3 +37,25 @@ Rules for the build:
 - **It uses the swap points in [PORTING.md](PORTING.md).** Each level is a set of swappable assets and scene settings,
   not a separate code path.
 - **Scale to the machine.** Default to the highest level that holds a smooth frame rate, and let the viewer override it.
+
+## Muse Lab
+
+The Lab lets Muse do traffic R&D: it writes routing algorithms or tunes settings, tests them in SimTest on a smaller
+Los Angeles, learns from the scores, and has to repeat its best result on commuters it never saw.
+Muse works between rounds, never per car, so a session costs about a cent.
+
+Built:
+- Algorithm mode: Muse writes the road cost function. Code must pass an allowlist and runs without the API key.
+- Settings mode: Muse starts from rough settings, never sees the hand-tuned ones, and tries to reach or beat them.
+- Parallel Muse calls, a token budget, and a session record with every candidate.
+
+Next:
+- Run the Lab during the day: rewrite the plan from the morning's real conditions, then apply it in minutes.
+- Let Muse tune parking, trash pickup and signal timing the same way.
+- Train real models: Muse writes a PyTorch training script for short-term travel time prediction, the Lab tests the result.
+  This needs no more than a CPU for a small model. Until it runs, it is a plan and not a claim.
+- Distributed SimTest: phones and cars run one small test each and earn karma. Some tests are run twice, so a device
+  cannot report a fake result.
+- More compute: larger cities and more candidates per round should find more, and that is untested until someone runs it.
+- Real isolation: production would run generated code in a locked-down container, not only an allowlist.
+

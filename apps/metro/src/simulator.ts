@@ -44,7 +44,47 @@ export interface RunConfig {
   frameSeconds?: number;
   /** Extra travel cost per edge, for strategy from a supervisor. Multiplies free-flow time. */
   edgeWeights?: Float32Array;
+  /** Replaces the road cost TES routes on. This is where a tuned or generated algorithm plugs in. */
+  roadCost?: (road: RoadState) => number;
+  /** How many batches TES plans each reroute, so each batch sees the plans of the last. */
+  tesSlices?: number;
 }
+
+/** What a TES routing algorithm can see about one road at the moment it plans. */
+export interface RoadState {
+  /** Seconds to cross when empty. */
+  freeSeconds: number;
+  /** Seconds to cross, as measured by cars just now. */
+  liveSeconds: number;
+  /** Cars TES has already planned onto this road, as a share of what it can pass this interval. */
+  load: number;
+  lengthKm: number;
+  capacityPerHour: number;
+  isFreeway: boolean;
+  isRamp: boolean;
+  isArterial: boolean;
+  hasSignal: boolean;
+  /** Clock hour, such as 7.5 for 7:30 AM. */
+  hour: number;
+}
+
+export interface RoutingParams {
+  /** How strongly planned traffic raises a road's cost. */
+  alpha: number;
+  /** How sharply that cost rises as a road fills. */
+  power: number;
+  /** Push toward spreading traffic, from 0 for selfish to 1 for system optimal. */
+  coordination: number;
+  /** Batches planned per reroute. */
+  slices: number;
+}
+
+/** The values tuned by hand during development. A Lab session is judged against these. */
+export const HAND_TUNED: RoutingParams = { alpha: 0.15, power: 4, coordination: 0.5, slices: 4 };
+
+/** The standard TES road cost, as a function of its settings. */
+export const paramCost = (p: RoutingParams) => (road: RoadState) =>
+  Math.max(road.liveSeconds, road.freeSeconds * (1 + p.alpha * Math.pow(road.load, p.power) * (1 + 4 * p.coordination)));
 
 export interface Frame {
   time: number;
@@ -94,6 +134,8 @@ const ACCESS_SECONDS = 180;
 const SIGNAL_SECONDS = 22;
 /** How far one driver's idea of a road's time can differ from another's. */
 const ROUTE_VARIATION = 0.25;
+/** Simulated time zero is 5 AM. */
+const SIM_CLOCK_START_HOUR = 5;
 
 /** A simple speed-based fuel curve: litres per km, worst in stop-and-go and at very high speed. */
 export function fuelPerKm(kph: number) {
@@ -237,6 +279,10 @@ export class MetroSim {
   private readonly random: () => number;
   private readonly router: Router;
   private readonly plannedVolume: Float32Array;
+  private planningTime = 0;
+  /** One object reused for every road, because this runs millions of times. */
+  private readonly roadState: RoadState = { freeSeconds: 0, liveSeconds: 0, load: 0, lengthKm: 0, capacityPerHour: 0, isFreeway: false, isRamp: false, isArterial: false, hasSignal: false, hour: 0 };
+  private readonly standardCost: (road: RoadState) => number;
   private readonly observed: Float32Array;
   private readonly edgeTimeSum: Float32Array;
   private readonly edgeTimeCount: Int32Array;
@@ -307,6 +353,7 @@ export class MetroSim {
     this.pool = new Int32Array(Math.max(1024, cars * 40));
     this.router = new Router(network);
     this.plannedVolume = new Float32Array(edges);
+    this.standardCost = paramCost({ ...HAND_TUNED, coordination: config.coordination });
     this.observed = new Float32Array(edges);
     this.edgeTimeSum = new Float32Array(edges);
     this.edgeTimeCount = new Int32Array(edges);
@@ -349,17 +396,29 @@ export class MetroSim {
   private fillCost(mode: RoutingMode) {
     const { cost, freeSeconds, observed, plannedVolume, n } = this;
     const weights = this.config.edgeWeights;
-    const { coordination, sampleRate, rerouteSeconds } = this.config;
+    const { sampleRate, rerouteSeconds, capacityScale } = this.config;
+    const roadCost = this.config.roadCost ?? this.standardCost;
+    const road = this.roadState;
+    road.hour = SIM_CLOCK_START_HOUR + this.planningTime / 3600;
     for (let e = 0; e < n.edgeCount; e++) {
       let seconds = freeSeconds[e];
       if (mode === 'live-traffic') {
         seconds = observed[e];
       } else if (mode === 'coordinated') {
         // Planned traffic, not only traffic already there, and each car's effect on the cars behind it.
-        const capacity = (n.edgeCapacity[e] * sampleRate * this.config.capacityScale * rerouteSeconds) / 3600;
-        const ratio = plannedVolume[e] / Math.max(capacity, 0.01);
-        const bpr = 0.15 * ratio * ratio * ratio * ratio;
-        seconds = Math.max(observed[e], freeSeconds[e] * (1 + bpr * (1 + 4 * coordination)));
+        const capacity = (n.edgeCapacity[e] * sampleRate * capacityScale * rerouteSeconds) / 3600;
+        road.freeSeconds = freeSeconds[e];
+        road.liveSeconds = observed[e];
+        road.load = plannedVolume[e] / Math.max(capacity, 0.01);
+        road.lengthKm = n.edgeLength[e] / 1000;
+        road.capacityPerHour = n.edgeCapacity[e] * capacityScale;
+        road.isFreeway = n.edgeClass[e] === 0;
+        road.isRamp = n.edgeClass[e] === 1;
+        road.isArterial = n.edgeClass[e] === 2;
+        road.hasSignal = n.edgeSignal[e] > 0;
+        const value = roadCost(road);
+        // A generated algorithm that misbehaves on a road falls back to live traffic for that road.
+        seconds = value > 0 && Number.isFinite(value) ? value : observed[e];
       }
       cost[e] = weights ? seconds * weights[e] : seconds;
     }
@@ -383,7 +442,7 @@ export class MetroSim {
     }
     const stack: number[] = [];
     // Coordinated cars are assigned in slices, so each slice sees the plans of the last.
-    const slices = mode === 'coordinated' ? 4 : 1;
+    const slices = mode === 'coordinated' ? (this.config.tesSlices ?? HAND_TUNED.slices) : 1;
     for (let slice = 0; slice < slices; slice++) {
       this.fillCost(mode);
       for (const [origin, cars] of byOrigin) {
@@ -584,6 +643,7 @@ export class MetroSim {
       if (now % config.rerouteSeconds === 0) {
         this.updateObserved();
         const horizon = now + config.rerouteSeconds;
+        this.planningTime = now;
         const tes: number[] = [];
         const rest: number[] = [];
         let scan = next;
