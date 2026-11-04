@@ -27,7 +27,7 @@ export class LiveMap {
     const maxX = Math.max(...xs);
     const minZ = Math.min(...zs);
     const maxZ = Math.max(...zs);
-    const pad = 40;
+    const pad = 62;
     this.k = Math.min((canvas.width - pad * 2) / (maxX - minX), (canvas.height - pad * 2) / (maxZ - minZ));
     this.ox = canvas.width / 2 - (this.k * (minX + maxX)) / 2;
     this.oz = canvas.height / 2 + (this.k * (minZ + maxZ)) / 2;

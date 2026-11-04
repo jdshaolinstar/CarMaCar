@@ -169,3 +169,5 @@ label { display: block; font-size: 14px; margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto; }
 }
+
+[hidden] { display: none !important; }

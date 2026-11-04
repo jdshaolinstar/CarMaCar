@@ -78,14 +78,14 @@ export class CityScene {
     this.scene.clearColor = new Color4(0.62, 0.78, 0.93, 1);
 
     const hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), this.scene);
-    hemi.intensity = 0.78;
+    hemi.intensity = 0.62;
     const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, 0.35), this.scene);
     sun.position = new Vector3(120, 180, -100);
-    sun.intensity = 0.8;
+    sun.intensity = 0.72;
     this.shadows = new ShadowGenerator(2048, sun);
     this.shadows.useBlurExponentialShadowMap = true;
 
-    this.overview = new ArcRotateCamera('overview', -Math.PI / 2.4, 0.82, 300, Vector3.Zero(), this.scene);
+    this.overview = new ArcRotateCamera('overview', -Math.PI / 2, 0.5, 330, new Vector3(30, 0, 0), this.scene);
     this.overview.lowerRadiusLimit = 40;
     this.overview.upperRadiusLimit = 460;
     this.overview.upperBetaLimit = 1.35;
@@ -150,8 +150,8 @@ export class CityScene {
     ground.isPickable = true;
 
     const yellow = this.solid('#e6c34a');
-    const walk = this.solid('#b4b2ab');
-    const { nodes, segments, roadHalfWidth, sidewalkWidth } = this.city;
+    const walk = this.solid('#9a9a94');
+    const { nodes, segments, roadHalfWidth } = this.city;
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
     const edge = roadHalfWidth;
 
@@ -174,7 +174,6 @@ export class CityScene {
     blocks.material = walk;
     blocks.receiveShadows = true;
     blocks.isPickable = false;
-    void sidewalkWidth;
 
     for (const s of segments) {
       const a = nodeById.get(s.a)!;
@@ -202,7 +201,7 @@ export class CityScene {
     let n = 0;
 
     const addBuilding = (x: number, z: number, w: number, d: number) => {
-      const h = 9 + ((n * 37) % 22);
+      const h = 6 + ((n * 37) % 10);
       const uvW = w / 4;
       const uvD = d / 4;
       const uvH = h / 4;
