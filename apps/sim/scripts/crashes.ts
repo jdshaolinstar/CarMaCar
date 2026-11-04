@@ -10,7 +10,7 @@ const share = Number(process.argv[3] ?? 0);
 let world: World | undefined;
 const service = new DelayedMapService(city, () => world!, 20);
 world = new World(city, seed, share > 0 ? service : null);
-world.populateParked(0.6);
+world.populateParked(Number(process.argv[4] ?? 0.6));
 world.addScouts(8);
 world.setDemand(World.makeDemand(city, seed + 1, 60, 200, share));
 

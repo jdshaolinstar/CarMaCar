@@ -199,6 +199,7 @@ const HUB_RADIUS = 9;
 const AISLE_CLEARANCE = 13;
 const PULL_OUT_GAP = 26;
 const VIEW_CORRIDOR = 2.4;
+const MERGE_ROOM = 6.5;
 
 const MANUAL_ACCELERATION = 5;
 const MANUAL_BRAKING = 10;
@@ -1218,7 +1219,9 @@ export class World {
       const point = beyond > 0 ? add(end.point, scale(end.tangent, beyond)) : path.sample(along).point;
       for (const other of nearby) {
         // A car pulling out of a stall is about to be in this lane, so give it room.
-        const reach = other.phase === 'parkOut' || other.merging ? 4.5 : 1.9;
+        // A car already on the spot a merger is aiming for keeps going, or each waits for the other.
+        const onLanding = other.merging && other.path ? distance(car.pos, other.path.sample(other.path.length).point) < MERGE_ROOM + 2 : false;
+        const reach = other.phase === 'parkOut' || (other.merging && !onLanding) ? 4.5 : 1.9;
         if (distance(other.pos, point) < reach) return ahead;
       }
     }
@@ -1379,6 +1382,13 @@ export class World {
       const headedFor = car.endsAtStall && !car.insideGarage && car.targetStallId ? this.stalls.get(car.targetStallId) : null;
       if (headedFor?.garageId && !this.doorClear(this.garageOf(headedFor), car)) {
         limit = Math.min(limit, brakingSpeed(path.length - car.s));
+      }
+
+      // Priority over traffic behind, but never onto a spot already taken up ahead.
+      if (car.merging) {
+        const landing = path.sample(path.length).point;
+        const taken = this.activeCars.some((o) => o !== car && o.level === 0 && !o.insideGarage && distance(o.pos, landing) < MERGE_ROOM);
+        if (taken) limit = Math.min(limit, brakingSpeed(path.length - car.s - 2));
       }
 
       const toStopLine = car.stopS - car.s;
