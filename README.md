@@ -175,7 +175,7 @@ To rerun it, see `apps/metro/scripts/`: `study.ts`, `algo-lab.ts`, `muse-city.ts
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
 | Muse Lab | Production idea, run offline. Muse Spark writes the algorithms, and the Los Angeles simulator tests them. |
 | Los Angeles study | Simulation. Real roads and Census commute flows, with modeled traffic. |
-| Graphics levels | Display only. Cameras see the same frames at every level. |
+| Graphics levels, weather, city sound | Display only. A pixel comparison at level 6 in rain showed no change in camera frames. |
 | Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |
 
 ## Run it yourself

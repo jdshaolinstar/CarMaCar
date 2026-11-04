@@ -15,6 +15,7 @@ import {
   type Camera,
 } from '@babylonjs/core';
 import { pointOnRing, type CityMap } from '@carmacar/shared';
+import type { Atmosphere, Weather } from './atmosphere';
 import { DISPLAY_ONLY_LAYER, type CityScene, type TimeOfDay } from './scene';
 
 export const GRAPHICS_LEVELS = [
@@ -23,6 +24,7 @@ export const GRAPHICS_LEVELS = [
   { level: 3, name: 'Buildings' },
   { level: 4, name: 'Street detail' },
   { level: 5, name: 'Lighting' },
+  { level: 6, name: 'Headlights and weather' },
 ];
 export const DEFAULT_GRAPHICS_LEVEL = 3;
 
@@ -30,6 +32,12 @@ const PROP_SPACING = 17;
 const SKY_DIAMETER = 3000;
 const DETAIL_VIEW_DISTANCE = 2000;
 const BASE_VIEW_DISTANCE = 900;
+const CLEAR_EXPOSURE = 1.45;
+const RAIN_EXPOSURE = 1.05;
+/** Night stays readable on screen. This grading never reaches capture cameras. */
+const NIGHT_EXPOSURE = 2.6;
+const DUSK_EXPOSURE = 1.7;
+const RAIN_SKY_BRIGHTNESS = 0.42;
 
 function mulberry(seed: number) {
   let t = seed >>> 0;
@@ -49,10 +57,13 @@ export class GraphicsLevels {
   private pipelines: DefaultRenderingPipeline[] = [];
   private grades: { camera: Camera; grade: ImageProcessingPostProcess }[] = [];
   private time: TimeOfDay = 'day';
+  private weather: Weather = 'clear';
+  private grading: ImageProcessingConfiguration | null = null;
 
   constructor(
     private readonly view: CityScene,
     private readonly city: CityMap,
+    private readonly atmosphere: Atmosphere,
   ) {}
 
   set(level: number) {
@@ -64,12 +75,33 @@ export class GraphicsLevels {
     this.sky?.setEnabled(level >= 4 && this.time !== 'night');
     this.view.setViewDistance(level >= 4 ? DETAIL_VIEW_DISTANCE : BASE_VIEW_DISTANCE);
     this.setLighting(level >= 5);
+    this.atmosphere.setEnabled(level >= 6);
+    this.applyWeather();
+  }
+
+  setWeather(weather: Weather) {
+    this.weather = weather;
+    this.atmosphere.setWeather(weather);
+    this.applyWeather();
+  }
+
+  /** Rain darkens the picture for viewers only. Capture cameras see the same scene as before. */
+  private applyWeather() {
+    const rain = this.level >= 6 && this.weather === 'rain';
+    if (this.grading) {
+      const dark = this.level >= 6 ? { day: rain ? RAIN_EXPOSURE : CLEAR_EXPOSURE, dusk: DUSK_EXPOSURE, night: NIGHT_EXPOSURE } : null;
+      this.grading.exposure = dark ? dark[this.time] : CLEAR_EXPOSURE;
+    }
+    const sky = this.skyMaterial?.emissiveTexture;
+    if (sky) sky.level = rain ? RAIN_SKY_BRIGHTNESS : 1;
   }
 
   setTime(time: TimeOfDay) {
     this.time = time;
     this.sky?.setEnabled(this.level >= 4 && time !== 'night');
     this.tintSky();
+    this.atmosphere.setTime(time);
+    this.applyWeather();
   }
 
   private tintSky() {
@@ -221,7 +253,8 @@ export class GraphicsLevels {
       const config = new ImageProcessingConfiguration();
       config.toneMappingEnabled = true;
       config.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-      config.exposure = 1.45;
+      config.exposure = CLEAR_EXPOSURE;
+      this.grading = config;
       config.contrast = 1.35;
       config.vignetteEnabled = true;
       config.vignetteWeight = 1.4;
@@ -236,6 +269,7 @@ export class GraphicsLevels {
       this.pipelines = [];
       for (const { camera, grade } of this.grades) grade.dispose(camera);
       this.grades = [];
+      this.grading = null;
     }
   }
 }

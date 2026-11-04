@@ -7,7 +7,9 @@ import { PlatformClient } from './platform';
 import { CityScene, type CameraView, type TimeOfDay } from './scene';
 import { renderSystems, type SystemDef } from './systems';
 import { renderResults } from './results';
+import { Atmosphere, type Weather } from './atmosphere';
 import { DEFAULT_GRAPHICS_LEVEL, GRAPHICS_LEVELS, GraphicsLevels } from './graphics';
+import { CitySound } from './sound';
 import { HIGHWAY_MODES, HighwayDemo, highwayDemoLayout, type HighwayModeId, type HighwayScenario } from './highway-demo';
 import { HighwayView } from './highway-view';
 import { ROUND_SECONDS, TrashHunt } from './trash-hunt';
@@ -590,6 +592,22 @@ const systems: SystemDef[] = [
     control: { type: 'toggle', value: false },
   },
   {
+    id: 'weather',
+    name: 'Weather',
+    description: 'Rain for the people watching, from graphics level 6. Cameras keep seeing a dry city, so vision results stay valid.',
+    layer: 'simulation',
+    engine: 'Display only',
+    control: { type: 'choice', value: 'clear', options: [{ value: 'clear', label: 'Clear' }, { value: 'rain', label: 'Rain' }] },
+  },
+  {
+    id: 'sound',
+    name: 'City sound',
+    description: 'Road noise, rain and the engine of the car you are following. Generated as it plays.',
+    layer: 'simulation',
+    engine: 'Display only',
+    control: { type: 'toggle', value: false },
+  },
+  {
     id: 'graphics',
     name: 'Graphics level',
     description: 'How the city looks to you, from plain blocks up. Cameras see the same frames at every level.',
@@ -747,6 +765,10 @@ function applySystem(id: string, value: boolean | number | string) {
     scene.setTimeOfDay(value as TimeOfDay);
     graphics.setTime(value as TimeOfDay);
   } else if (id === 'graphics') graphics.set(value as number);
+  else if (id === 'weather') {
+    graphics.setWeather(value as Weather);
+    citySound.setRaining(value === 'rain');
+  } else if (id === 'sound') citySound.setEnabled(value as boolean);
   else if (id === 'highway') setHighway(value as boolean);
   else if (id === 'trashHunt') {
     if (value) startHunt();
@@ -758,7 +780,9 @@ function applySystem(id: string, value: boolean | number | string) {
   else if (id === 'highwayScenario') highwayDemo().apply({ scenario: value as HighwayScenario });
 }
 
-const graphics = new GraphicsLevels(scene, city);
+const atmosphere = new Atmosphere(scene, world);
+const graphics = new GraphicsLevels(scene, city, atmosphere);
+const citySound = new CitySound(world, () => (selectedId ? (world.cars.get(selectedId) ?? null) : null));
 
 // The highway, built only when someone asks for it.
 let highwayView: HighwayView | null = null;
@@ -1450,6 +1474,7 @@ showSelection();
 
 if (params.get('time')) setSystem('timeOfDay', params.get('time')!);
 if (params.get('gfx')) setSystem('graphics', Number(params.get('gfx')));
+if (params.get('weather')) setSystem('weather', params.get('weather')!);
 
 // For scripted test runs.
 Object.assign(window, { carmacar: { world, scene, hero, readings, getTwin: () => twin, toggleStallCar, highwayDemo, setHighway, rampReadings, graphics } });

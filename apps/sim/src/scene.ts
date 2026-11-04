@@ -981,6 +981,16 @@ export class CityScene {
   }
 
   /** Height of a car, including its ride on the transporter. */
+  /** Ground height under a car, for things drawn around it. */
+  carFloor(car: Car) {
+    return this.carHeight(car);
+  }
+
+  /** Whether a car is on a garage level the viewer is showing. */
+  carIsVisible(car: Car) {
+    return car.level <= this.garageTopLevel;
+  }
+
   private carHeight(car: Car) {
     const y = this.floorY(car.level);
     if (car.liftT <= 0) return y;

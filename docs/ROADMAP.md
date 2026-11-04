@@ -13,7 +13,7 @@ The ring highway works as its own model. Next steps:
 
 ## Graphics levels
 
-Levels 1 to 5 are built: open **Systems**, then **Graphics level**, or add `?gfx=5` to the URL. Levels 6 and 7 are planned.
+Levels 1 to 6 are built: open **Systems**, then **Graphics level**, or add `?gfx=6&time=night&weather=rain` to the URL. Levels 6 and 7 are planned.
 The slider raises the look of the city step by step, from the blocky town toward open-world game quality, without
 changing the simulation.
 
@@ -78,6 +78,8 @@ Goal: pick a location, such as downtown Los Angeles, and run the 3D sim on it.
 In order of effect for the effort:
 
 1. Lighting, weather, night with headlights, reflections, and sound. These are code, and they change the feel the most.
+   Level 6 has headlights, taillights, rain and generated city sound. Reflections and wet roads are next. Sound has only
+   been checked for errors, so it still needs listening to.
 2. Free CC0 assets for cars, street props, textures and skies. Every asset must stay listed in the README.
 3. Blender run from scripts, for families of cars and buildings in our own style. We own the output.
 4. Paid assets last. Most licenses don't allow redistribution in a public repo, so check first.
