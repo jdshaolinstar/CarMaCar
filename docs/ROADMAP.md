@@ -13,7 +13,7 @@ The ring highway works as its own model. Next steps:
 
 ## Graphics levels
 
-Levels 1 to 6 are built: open **Systems**, then **Graphics level**, or add `?gfx=6&time=night&weather=rain` to the URL. Levels 6 and 7 are planned.
+Levels 1 to 6 are built: open **Systems**, then **Graphics level**, or add `?gfx=6&time=night&weather=rain` to the URL. Level 7 is planned.
 The slider raises the look of the city step by step, from the blocky town toward open-world game quality, without
 changing the simulation.
 
