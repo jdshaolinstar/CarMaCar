@@ -122,6 +122,24 @@ h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .selected { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 .selected b { color: var(--line-white); font-weight: 600; }
 
+.tools { display: flex; gap: 6px; }
+.note { font-size: 13.5px; color: var(--lane-yellow); margin-bottom: 8px; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.systems-panel { top: 96px; left: 416px; width: 400px; max-height: calc(100vh - 110px); overflow-y: auto; }
+.layer { padding-left: 10px; border-left: 4px solid var(--sign-blue); margin-bottom: 14px; }
+.layer.simulation { border-left-color: var(--lane-yellow); }
+.layer h2 { margin-bottom: 0; }
+.layer .hint { margin: 0 0 6px; }
+.system { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 6px 0; }
+.system-name { font-weight: 600; font-size: 15px; }
+.system-detail { color: var(--muted); font-size: 13px; line-height: 1.3; }
+.system input[type='checkbox'] { width: 19px; height: 19px; flex: none; accent-color: var(--curb-green); }
+.range { display: flex; align-items: center; gap: 6px; flex: none; }
+.range input { width: 88px; accent-color: var(--curb-green); }
+.range output { width: 38px; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+.system select { background: var(--asphalt-raised); color: var(--line-white); border: 1px solid #59626a; border-radius: 4px; padding: 4px; font: inherit; }
+
 .drive-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .drive-row .hint { margin: 0; }
 

@@ -218,6 +218,28 @@ test('network drivers all get parked, without jams or broken routes', async () =
   }
 });
 
+test('parked cars in the live city pull out and go somewhere', () => {
+  const world = new World(city, 22, null);
+  world.keepCarsInCity = true;
+  world.networkShare = 0;
+  world.populateParked(0.6);
+  const startingIds = new Set(world.cars.keys());
+  run(world, 300);
+  const travelled = [...world.cars.values()].filter((c) => startingIds.has(c.id) && c.destinationId);
+  assert.ok(travelled.length > 10, `only ${travelled.length} left their stall`);
+  assert.equal(world.cars.size, startingIds.size, 'cars should stay in the city');
+});
+
+test('a parked car can be driven: it pulls out, then obeys the keyboard', () => {
+  const world = new World(city, 23, null);
+  const car = world.parkCarInStall(city.stalls[5], 0, '#c62828', true)!;
+  assert.ok(world.takeControl(car));
+  run(world, 6);
+  assert.equal(car.phase, 'drive');
+  assert.ok(car.control);
+  assert.equal(world.stallOwner.has(city.stalls[5].id), false);
+});
+
 test('the evaluator counts drivers who never found a space', async () => {
   // A nearly full city over a short window: some drivers must still be looking at the end.
   const config = { seed: 3, drivers: 40, spanSeconds: 60, parkedShare: 0.98, networkShare: 0, staleSeconds: 30, horizonSeconds: 120 };

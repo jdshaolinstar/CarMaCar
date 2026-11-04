@@ -4,6 +4,7 @@ import { LiveMap } from './map';
 import { navigate } from './nav';
 import { PlatformClient } from './platform';
 import { CityScene, type CameraView } from './scene';
+import { renderSystems, type SystemDef } from './systems';
 import { World, type Car, CAR_COLORS } from './world';
 
 const params = new URLSearchParams(location.search);
@@ -11,9 +12,11 @@ const seed = Number(params.get('seed') ?? 11);
 const scouts = Number(params.get('scouts') ?? 8);
 const drivers = Number(params.get('drivers') ?? 30);
 const networkShare = Number(params.get('network') ?? 0.7);
-const framesPerSecond = Number(params.get('fps') ?? 1);
+let framesPerSecond = Number(params.get('fps') ?? 1);
 const parkedShare = Number(params.get('parked') ?? 0.62);
-const timeScale = Number(params.get('speed') ?? 1);
+let timeScale = Number(params.get('speed') ?? 1);
+let visionOn = true;
+let agentOn = true;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const statusEl = $('status');
@@ -29,6 +32,8 @@ const platform = await PlatformClient.connect().catch((err: Error) => {
 });
 
 const world = new World(city, seed, platform);
+world.keepCarsInCity = true;
+world.networkShare = networkShare;
 world.populateParked(parkedShare);
 world.addScouts(scouts);
 const hero = world.addHero();
@@ -86,7 +91,7 @@ function chooseCamera(): { car: Car; pose: CameraPose } | null {
 }
 
 async function takePhoto() {
-  if (!platform || inFlight >= 3 || frameLimitHit) return;
+  if (!platform || !visionOn || inFlight >= 3 || frameLimitHit) return;
   const choice = chooseCamera();
   if (!choice) return;
   inFlight++;
@@ -304,9 +309,106 @@ $('view-dash').addEventListener('click', () => setView('dash'));
 const labelsToggle = $('toggle-labels') as HTMLInputElement;
 labelsToggle.addEventListener('change', () => scene.setLabelsVisible(labelsToggle.checked));
 
-const lightsToggle = $('toggle-lights') as HTMLInputElement;
-lightsToggle.addEventListener('change', () => {
-  world.signals.mode = lightsToggle.checked ? 'fixed' : 'off';
+// The systems panel. Every switch here changes something real.
+const systems: SystemDef[] = [
+  {
+    id: 'vision',
+    name: 'Camera vision',
+    description: 'Turns car photos into the parking map.',
+    layer: 'production',
+    engine: 'Meta SAM 3.1 with geometry code',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'photoRate',
+    name: 'Photos per second',
+    description: 'How often the network looks. More photos cost more.',
+    layer: 'production',
+    engine: 'Setting',
+    control: { type: 'range', value: framesPerSecond, min: 0.25, max: 3, step: 0.25, format: (v) => `${v}/s` },
+  },
+  {
+    id: 'guidance',
+    name: 'Parking guidance',
+    description: 'Reserves stalls and sends network cars to them.',
+    layer: 'production',
+    engine: 'Rules, no LLM',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'agent',
+    name: 'Trip agent',
+    description: 'Understands requests and plans trips with tools.',
+    layer: 'production',
+    engine: 'Meta Muse Spark',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'scouts',
+    name: 'Survey cars',
+    description: 'Cars that drive around only to take photos.',
+    layer: 'simulation',
+    engine: 'Scripted, no AI',
+    control: { type: 'range', value: scouts, min: 0, max: 16, step: 1, format: (v) => String(v) },
+  },
+  {
+    id: 'drivers',
+    name: 'City drivers',
+    description: 'Cars taking trips and pulling out of stalls.',
+    layer: 'simulation',
+    engine: 'Scripted, no AI',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'network',
+    name: 'Drivers on the network',
+    description: 'Share of drivers using CarMaCar. The rest search by eye.',
+    layer: 'simulation',
+    engine: 'Setting',
+    control: { type: 'range', value: networkShare, min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+  },
+  {
+    id: 'lights',
+    name: 'Traffic lights',
+    description: 'Timed lights at every intersection.',
+    layer: 'simulation',
+    engine: 'Scripted, no AI',
+    control: { type: 'toggle', value: true },
+  },
+  {
+    id: 'speed',
+    name: 'Simulation speed',
+    description: 'How fast the city runs compared with real time.',
+    layer: 'simulation',
+    engine: 'Setting',
+    control: { type: 'range', value: timeScale, min: 1, max: 4, step: 0.5, format: (v) => `${v}x` },
+  },
+];
+
+function applySystem(id: string, value: boolean | number | string) {
+  if (id === 'vision') {
+    visionOn = value as boolean;
+    $('map-note').hidden = visionOn;
+  } else if (id === 'photoRate') framesPerSecond = value as number;
+  else if (id === 'guidance') world.guidance = value as boolean;
+  else if (id === 'agent') {
+    agentOn = value as boolean;
+    ($('trip-send') as HTMLButtonElement).disabled = !agentOn;
+    $('agent-note').hidden = agentOn;
+  } else if (id === 'scouts') world.setScoutCount(value as number);
+  else if (id === 'drivers') world.driversEnabled = value as boolean;
+  else if (id === 'network') world.networkShare = value as number;
+  else if (id === 'lights') world.signals.mode = value ? 'fixed' : 'off';
+  else if (id === 'speed') timeScale = value as number;
+}
+
+renderSystems($('systems-list'), systems, applySystem);
+
+const systemsButton = $('systems-open');
+systemsButton.addEventListener('click', () => {
+  const panel = $('systems');
+  panel.hidden = !panel.hidden;
+  systemsButton.setAttribute('aria-pressed', String(!panel.hidden));
 });
 
 // Driving by hand.
@@ -392,7 +494,7 @@ $('trip').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $('trip-text') as HTMLInputElement;
   const text = input.value.trim();
-  if (!text || !platform) return;
+  if (!text || !platform || !agentOn) return;
   input.value = '';
   const car = world.cars.get(selectedId) ?? hero;
   const id = await platform.requestTrip({ carId: car.id, text, position: car.pos });
@@ -405,7 +507,11 @@ scene.start((dt) => {
   map.draw(twin, world, highlight, selectedId, route);
 });
 
-setInterval(() => void takePhoto(), 1000 / framesPerSecond);
+function photoLoop() {
+  void takePhoto();
+  setTimeout(photoLoop, 1000 / framesPerSecond);
+}
+photoLoop();
 setInterval(() => void pollTwin(), 700);
 setInterval(showSelection, 1000);
 showSelection();

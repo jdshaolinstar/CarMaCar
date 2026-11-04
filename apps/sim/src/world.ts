@@ -117,6 +117,8 @@ const brakingSpeed = (distance: number) => Math.sqrt(2 * COMFORT_BRAKING * Math.
 const PARK_SECONDS = 2.4;
 const PARKED_MIN_SECONDS = 90;
 const PARKED_MAX_SECONDS = 420;
+const LIVE_PARKED_MIN_SECONDS = 25;
+const LIVE_PARKED_MAX_SECONDS = 500;
 export const CAR_COLORS = ['#c62828', '#1565c0', '#eceff1', '#212121', '#2e7d32', '#9e9e9e', '#f9a825', '#6a1b9a', '#37474f', '#ad1457'];
 
 export function makeRng(seed: number) {
@@ -141,6 +143,14 @@ export class World {
   /** Node id to the cars currently inside that intersection. */
   private readonly junctions = new Map<string, Set<string>>();
   time = 0;
+  /** Live city: cars take new trips instead of leaving. The adoption study keeps this off. */
+  keepCarsInCity = false;
+  /** Share of cars that use the parking network. */
+  networkShare = 0.7;
+  /** System switch: new background drivers and cars pulling out. */
+  driversEnabled = true;
+  /** System switch: the platform directs network cars to stalls. */
+  guidance = true;
   private nextId = 1;
   private demand: DemandItem[] = [];
   private readonly rng: () => number;
@@ -155,6 +165,12 @@ export class World {
     this.signals = new Signals(city);
     this.stalls = new Map(city.stalls.map((s) => [s.id, s]));
     this.rng = makeRng(seed);
+  }
+
+  private parkedSeconds() {
+    const min = this.keepCarsInCity ? LIVE_PARKED_MIN_SECONDS : PARKED_MIN_SECONDS;
+    const max = this.keepCarsInCity ? LIVE_PARKED_MAX_SECONDS : PARKED_MAX_SECONDS;
+    return min + this.rng() * (max - min);
   }
 
   private pick<T>(list: T[]): T {
@@ -224,9 +240,7 @@ export class World {
     car.stallId = stall.id;
     car.pos = stall.center;
     car.heading = this.graph.edgeDir(car.edge);
-    car.leaveAt = permanent
-      ? Infinity
-      : this.time + PARKED_MIN_SECONDS + this.rng() * (PARKED_MAX_SECONDS - PARKED_MIN_SECONDS);
+    car.leaveAt = permanent ? Infinity : this.time + this.parkedSeconds();
     this.stallOwner.set(stall.id, car.id);
     return car;
   }
@@ -247,6 +261,16 @@ export class World {
       ids.push(this.blankCar('scout', edge, 0, '#00acc1').id);
     }
     return ids;
+  }
+
+  /** Adds or removes survey cars to reach a count. */
+  setScoutCount(count: number) {
+    const scouts = [...this.cars.values()].filter((c) => c.role === 'scout');
+    if (scouts.length < count) this.addScouts(count - scouts.length);
+    for (const car of scouts.slice(count)) {
+      this.leaveJunction(car);
+      this.cars.delete(car.id);
+    }
   }
 
   addHero(): Car {
@@ -276,14 +300,15 @@ export class World {
   }
 
   private spawnDriver(item: DemandItem) {
-    const car = this.blankCar(item.onNetwork ? 'network' : 'manual', item.startEdge, item.variant, item.color);
+    const onNetwork = this.keepCarsInCity ? this.rng() < this.networkShare : item.onNetwork;
+    const car = this.blankCar(onNetwork ? 'network' : 'manual', item.startEdge, item.variant, item.color);
     car.destinationId = item.destinationId;
     car.mode = 'cruise';
     if (item.onNetwork) this.requestParking(car);
   }
 
   private requestParking(car: Car) {
-    if (!this.parking || !car.destinationId || car.awaitingParking) return;
+    if (!this.parking || !this.guidance || !car.destinationId || car.awaitingParking) return;
     car.awaitingParking = true;
     void this.parking.find(car.id, car.destinationId, car.pos, car.excludeStalls).then((stallId) => {
       car.awaitingParking = false;
@@ -425,7 +450,7 @@ export class World {
       });
     }
     this.parking?.arrived(car.id);
-    car.leaveAt = this.time + PARKED_MIN_SECONDS + this.rng() * (PARKED_MAX_SECONDS - PARKED_MIN_SECONDS);
+    car.leaveAt = this.time + this.parkedSeconds();
     if (car.role === 'hero') car.leaveAt = this.time + 40;
   }
 
@@ -453,13 +478,27 @@ export class World {
       car.mode = 'cruise';
       car.spawnedAt = this.time;
       this.requestParking(car);
+    } else if (car.role === 'hero') {
+      car.mode = 'wander';
+    } else if (this.keepCarsInCity) {
+      this.startNewTrip(car);
     } else {
-      car.mode = car.role === 'hero' ? 'wander' : 'exit';
+      car.mode = 'exit';
     }
+  }
+
+  /** A car that has finished one trip picks another, so the city keeps moving. */
+  private startNewTrip(car: Car) {
+    car.role = this.rng() < this.networkShare ? 'network' : 'manual';
+    car.destinationId = this.pick(this.city.destinations).id;
+    car.mode = 'cruise';
+    car.spawnedAt = this.time;
+    if (car.role === 'network') this.requestParking(car);
   }
 
   /** Reacts to the platform's map: network cars drop stalls cameras say are taken and retry when unassigned. */
   syncWithTwin(twin: TwinSnapshot) {
+    if (!this.guidance) return;
     for (const car of this.cars.values()) {
       if (car.role !== 'network' || car.phase !== 'drive') continue;
       if (car.targetStallId) {
@@ -485,7 +524,7 @@ export class World {
     car.destinationId = first.destinationId;
     car.nextLegs = rest.map((leg) => ({ destinationId: leg.destinationId, stayMinutes: leg.stayMinutes }));
     if (car.phase === 'parked') {
-      this.beginLeaving(car);
+      car.leaveAt = this.time;
       car.nextLegs.unshift({ destinationId: first.destinationId, stayMinutes: first.stayMinutes });
       return;
     }
@@ -529,6 +568,11 @@ export class World {
 
   /** Hands a moving car to the keyboard. */
   takeControl(car: Car) {
+    if (car.phase === 'parked') {
+      car.control = { throttle: 0, steer: 0 };
+      car.leaveAt = this.time;
+      return true;
+    }
     if (car.phase !== 'drive') return false;
     this.leaveJunction(car);
     car.control = { throttle: 0, steer: 0 };
@@ -706,7 +750,7 @@ export class World {
 
   tick(dt: number) {
     this.time += dt;
-    while (this.demand.length > 0 && this.demand[0].at <= this.time) {
+    while (this.driversEnabled && this.demand.length > 0 && this.demand[0].at <= this.time) {
       const item = this.demand[0];
       // Join the road only where there is room. Otherwise wait for the next tick.
       if (!this.laneClear(this.graph.lanePoint(item.startEdge, this.graph.corner), 9)) break;
@@ -720,7 +764,8 @@ export class World {
     for (const car of [...this.cars.values()]) {
       if (car.phase === 'parked') {
         // Wait for a gap before pulling out into the lane.
-        if (this.time >= car.leaveAt && this.laneClear(car.pos, 18, car)) this.beginLeaving(car);
+        const wantsToLeave = this.time >= car.leaveAt && (this.driversEnabled || car.control !== null);
+        if (wantsToLeave && this.laneClear(car.pos, 18, car)) this.beginLeaving(car);
         continue;
       }
       if (car.phase === 'parkIn' || car.phase === 'parkOut') {

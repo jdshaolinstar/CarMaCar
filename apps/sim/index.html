@@ -37,7 +37,11 @@
         <div><dt>Photos analyzed</dt><dd id="stat-frames">0</dd></div>
         <div><dt>Karma earned</dt><dd id="stat-karma">0</dd></div>
       </dl>
-      <button id="place" type="button" aria-pressed="false">Place a car</button>
+      <p class="note" id="map-note" hidden>Camera vision is off. This map shows the last thing cameras saw.</p>
+      <div class="tools">
+        <button id="place" type="button" aria-pressed="false">Place a car</button>
+        <button id="systems-open" type="button" aria-pressed="false">Systems</button>
+      </div>
       <p class="hint" id="place-hint" hidden>Click a stall on this map or in the city. Click a parked car's stall to remove it.</p>
     </section>
 
@@ -57,7 +61,6 @@
         <button id="view-chase" type="button" aria-pressed="false">Behind car</button>
         <button id="view-dash" type="button" aria-pressed="false">Dashboard</button>
         <label class="check"><input id="toggle-labels" type="checkbox" checked />Labels</label>
-        <label class="check"><input id="toggle-lights" type="checkbox" checked />Traffic lights</label>
       </div>
       <p class="selected">Click any car to view it. Viewing: <b id="selected-car">Your car</b></p>
       <div class="drive-row">
@@ -69,10 +72,15 @@
         <label for="trip-text">Tell this car where to go</label>
         <div class="trip-row">
           <input id="trip-text" maxlength="400" autocomplete="off" value="Drive to the movie theater. Find parking. The movie ends at 3pm" />
-          <button type="submit">Send</button>
+          <button id="trip-send" type="submit">Send</button>
         </div>
       </form>
+      <p class="note" id="agent-note" hidden>The trip agent is off. Turn it on in Systems to send requests.</p>
       <p class="hint">Trip requests go to Meta's API and may be used to train its models.</p>
+    </section>
+
+    <section class="panel systems-panel" id="systems" aria-label="Systems" hidden>
+      <div id="systems-list"></div>
     </section>
 
     <div class="guide" id="nav" role="status" hidden>

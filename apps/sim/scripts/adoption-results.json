@@ -12,42 +12,42 @@
   {
     "parkedShare": 0.75,
     "networkShare": 0.25,
-    "parked": 21.375,
-    "stillSearching": 12,
-    "seconds": 253.6197152218093,
-    "meters": 233.4617452632047,
-    "walk": 42.73974199460082,
-    "km": 7.920009280715018
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 55.18562499999986,
+    "meters": 351.3158536726159,
+    "walk": 42.49924277515267,
+    "km": 14.052634146904635
   },
   {
     "parkedShare": 0.75,
     "networkShare": 0.5,
-    "parked": 16.125,
-    "stillSearching": 14.625,
-    "seconds": 329.08906517098706,
-    "meters": 235.59210053895362,
-    "walk": 39.929403278979464,
-    "km": 7.496907858609498
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 56.46156249999941,
+    "meters": 346.34946494392585,
+    "walk": 37.74239678185974,
+    "km": 13.853978597757033
   },
   {
     "parkedShare": 0.75,
     "networkShare": 0.75,
-    "parked": 9.5,
-    "stillSearching": 16,
-    "seconds": 414.4153925790305,
-    "meters": 224.3764095244961,
-    "walk": 34.36011350343158,
-    "km": 5.650712412872529
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 56.89531249999945,
+    "meters": 346.75271599390226,
+    "walk": 31.60659216529966,
+    "km": 13.87010863975609
   },
   {
     "parkedShare": 0.75,
     "networkShare": 1,
-    "parked": 4.875,
-    "stillSearching": 13,
-    "seconds": 474.02464934377684,
-    "meters": 243.3662869112298,
-    "walk": 21.925269367570337,
-    "km": 4.174659186269918
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 62.2340624999995,
+    "meters": 363.8516925914684,
+    "walk": 26.6913693960814,
+    "km": 14.554067703658736
   },
   {
     "parkedShare": 0.9,
@@ -62,42 +62,42 @@
   {
     "parkedShare": 0.9,
     "networkShare": 0.25,
-    "parked": 15.75,
-    "stillSearching": 13.875,
-    "seconds": 339.8030093061641,
-    "meters": 271.8761666831652,
-    "walk": 44.653489547707736,
-    "km": 8.162310662142685
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 74.76281250000025,
+    "meters": 474.8527516772193,
+    "walk": 43.83302067050452,
+    "km": 18.994110067088773
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0.5,
-    "parked": 9,
-    "stillSearching": 17.125,
-    "seconds": 416.6046434295462,
-    "meters": 265.89113800467317,
-    "walk": 44.363253841407,
-    "km": 6.793369149141711
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 74.00531249999985,
+    "meters": 467.78095197806255,
+    "walk": 44.57402791729428,
+    "km": 18.711238079122502
   },
   {
     "parkedShare": 0.9,
     "networkShare": 0.75,
-    "parked": 6.125,
-    "stillSearching": 15.75,
-    "seconds": 454.160501395598,
-    "meters": 241.69651749118324,
-    "walk": 45.08311874087059,
-    "km": 5.140267576900651
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 71.30499999999978,
+    "meters": 437.21261764374265,
+    "walk": 42.88568769901402,
+    "km": 17.48850470574971
   },
   {
     "parkedShare": 0.9,
     "networkShare": 1,
-    "parked": 5.75,
-    "stillSearching": 10.625,
-    "seconds": 435.1142927632159,
-    "meters": 270.1477687637971,
-    "walk": 50.64400102538026,
-    "km": 4.368462184202954
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 65.53937499999935,
+    "meters": 384.7975302874795,
+    "walk": 46.263850325193225,
+    "km": 15.39190121149918
   },
   {
     "parkedShare": 0.95,
@@ -112,41 +112,41 @@
   {
     "parkedShare": 0.95,
     "networkShare": 0.25,
-    "parked": 14.75,
-    "stillSearching": 14.75,
-    "seconds": 358.140002893567,
-    "meters": 324.6881509817419,
-    "walk": 48.163870409641376,
-    "km": 10.0349817749783
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 86.70781250000046,
+    "meters": 564.9961115683428,
+    "walk": 47.5886034059583,
+    "km": 22.599844462733714
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0.5,
-    "parked": 10.625,
-    "stillSearching": 16.375,
-    "seconds": 410.8415179193905,
-    "meters": 304.88320964162784,
-    "walk": 44.97109699963265,
-    "km": 8.311430564581444
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 84.66499999999971,
+    "meters": 532.5010453998848,
+    "walk": 46.342299453015414,
+    "km": 21.300041815995385
   },
   {
     "parkedShare": 0.95,
     "networkShare": 0.75,
-    "parked": 6.75,
-    "stillSearching": 16.875,
-    "seconds": 460.9078822862035,
-    "meters": 254.79000674917623,
-    "walk": 46.76461319728575,
-    "km": 6.053186996803548
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 83.54968749999995,
+    "meters": 518.7359565314915,
+    "walk": 45.792100750751686,
+    "km": 20.74943826125966
   },
   {
     "parkedShare": 0.95,
     "networkShare": 1,
-    "parked": 5.625,
-    "stillSearching": 12.25,
-    "seconds": 450.7448044591256,
-    "meters": 264.8237663248187,
-    "walk": 56.56612888006176,
-    "km": 5.028927917846484
+    "parked": 40,
+    "stillSearching": 0,
+    "seconds": 86.25187499999977,
+    "meters": 526.3729417150399,
+    "walk": 51.896331062441035,
+    "km": 21.054917668601597
   }
 ]
