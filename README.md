@@ -42,7 +42,7 @@ apps/sim (browser)                         apps/platform (Node service)
 
 **Muse Spark, as a vision model.** Spark looks for trash on sidewalks and names what it finds, and it can read parking too. SAM is faster and repeatable, so it reads parking by default. The Systems panel lets you switch models for either job.
 
-**Traffic Efficiency System (TES).** Code plots a route and a stall for each connected car, weighing traffic, the plans of other cars, and the walk. That loop has to be fast and repeatable. Above it sits the **Spark Strategist**: every 30 seconds, Muse Spark reads a digest of the whole city and steers TES through tools, avoiding streets, holding lights and moving demand between parking areas. That is the split real traffic centers use: strategy on top, controllers underneath.
+**Traffic Efficiency System (TES).** Code plots a route and a stall for each connected car, weighing traffic, the plans of other cars, and the walk. That loop has to be fast and repeatable. Above it sits the **Spark Strategist**: every 30 seconds, Muse Spark reads a digest of the whole city and steers TES through tools, avoiding streets, holding lights and moving demand between parking areas. That is the split real traffic centers use: strategy on top, controllers underneath. In two rounds of movie surge tests its decisions were sensible but made no measurable difference to results, so treat it as a working, explainable supervisor rather than a proven gain.
 
 **Why cameras, when cars have GPS?** GPS only covers people who share their location, and it knows nothing about parking. Cameras see every vehicle and every stall.
 
