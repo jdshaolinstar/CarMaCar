@@ -2,7 +2,7 @@
 import { distance, dot, generateCity, rampCameraView, rightOf, scale, type AgentEvent, type CameraPose, type CityMap, type ParkingVision, type TrashVision, type TripPlan, type TwinSnapshot, type Vec2 } from '@carmacar/shared';
 import { LiveMap } from './map';
 import { navigate } from './nav';
-import { PhoneApp } from './phone';
+import { makeDraggable, PhoneApp } from './phone';
 import { PlatformClient } from './platform';
 import { CityScene, type CameraView, type TimeOfDay } from './scene';
 import { renderSystems, type SystemDef } from './systems';
@@ -1197,11 +1197,17 @@ async function runResidents() {
 setInterval(() => void runResidents(), 5000);
 
 // The driver's phone.
+const placeLink = $('place-link') as HTMLAnchorElement;
+if (city.buildings) {
+  placeLink.textContent = 'Demo town';
+  placeLink.href = './';
+}
 const phone = new PhoneApp($('phone-map') as HTMLCanvasElement, city, world);
 phone.renderDestinations($('phone-places'), (name) => {
   ($('trip-text') as HTMLInputElement).value = `Take me to ${name} and find parking`;
   $('trip').dispatchEvent(new Event('submit', { cancelable: true }));
 });
+makeDraggable($('phone'), document.querySelector<HTMLElement>('.phone-bar')!);
 const phoneButton = $('phone-open');
 phoneButton.addEventListener('click', () => {
   const panel = $('phone');

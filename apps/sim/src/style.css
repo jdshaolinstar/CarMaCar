@@ -174,7 +174,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   font-size: 13.5px;
 }
 
-.phone-bar { display: flex; align-items: center; gap: 7px; padding: 9px 12px 7px; background: var(--sign-blue); color: #fff; }
+.phone-bar { cursor: grab; touch-action: none; user-select: none; display: flex; align-items: center; gap: 7px; padding: 9px 12px 7px; background: var(--sign-blue); color: #fff; }
 .phone-mark { font-weight: 800; border: 2px solid #fff; border-radius: 4px; padding: 1px 6px 0; line-height: 1.2; }
 .phone-karma { margin-left: auto; font-size: 12.5px; }
 #phone-map { display: block; width: 100%; height: auto; background: #eef0ec; }

@@ -6,6 +6,31 @@ import type { Car, World } from './world';
 const VIEW_METRES = 170;
 const ARROWS: Record<string, string> = { straight: '↑', left: '←', right: '→', arrive: '⚑', park: 'P' };
 
+/** Lets people drag a floating panel by its handle, and keeps at least part of it on screen. */
+export function makeDraggable(panel: HTMLElement, handle: HTMLElement) {
+  const KEEP_VISIBLE = 48;
+  let grab: { x: number; y: number } | null = null;
+  handle.addEventListener('pointerdown', (e) => {
+    const box = panel.getBoundingClientRect();
+    grab = { x: e.clientX - box.left, y: e.clientY - box.top };
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!grab) return;
+    const box = panel.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - KEEP_VISIBLE, Math.max(KEEP_VISIBLE - box.width, e.clientX - grab.x));
+    const top = Math.min(window.innerHeight - KEEP_VISIBLE, Math.max(0, e.clientY - grab.y));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+  });
+  const release = () => (grab = null);
+  handle.addEventListener('pointerup', release);
+  handle.addEventListener('pointercancel', release);
+}
+
 export class PhoneApp {
   private readonly ctx: CanvasRenderingContext2D;
 
