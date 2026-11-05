@@ -2,7 +2,7 @@
 
 **Live demo:** https://dmqdzapklh34t.cloudfront.net
 
-**Demo video:** VIDEO_URL_HERE
+**Demo video:** https://youtu.be/KTeSeGjy1dg
 
 Finding parking is a guessing game, and every driver guessing alone makes traffic worse. CarMaCar turns ordinary car and garage cameras into a live map of a city's parking, then uses Meta's AI to send each driver straight to a space, on a route that accounts for everyone else.
 
