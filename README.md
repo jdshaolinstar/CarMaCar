@@ -125,7 +125,7 @@ With human drivers set to move over 60% earlier, the stadium gain held at 17% an
 
 The 3D city proves the pipeline. This study asks whether the idea holds at city scale. Open **Los Angeles study** in the toolbar, or the Playbook of the same name.
 
-It simulates one morning commute on Los Angeles's real road network: about 214,000 road segments from OpenStreetMap and 2.4 million drivers modeled from US Census commute data. It is a 2D, queue-based model with no cameras, and runs were computed offline, so the page replays recorded results. Road capacity is calibrated at full size so today's apps average 30.3 minutes, against the Census figure of 30.8.
+It simulates one morning commute on Los Angeles's real road network: about 214,000 road segments from OpenStreetMap and 2.4 million drivers modeled from US Census commute data. It is a 2D, queue-based model with no cameras, and runs were computed offline, so the page replays recorded results. Road capacity is calibrated at full size so the baseline, every driver on live traffic, averages 30.3 minutes, against the Census figure of 30.8.
 
 | 190,648 simulated cars, one seed | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
 |---|---|---|---|---|
