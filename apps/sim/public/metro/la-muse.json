@@ -5,52 +5,47 @@
   "driversModeled": 2391329,
   "tesShareOfDrivers": "60%",
   "averageCommuteMinutes": {
-   "today": 30.3,
-   "withTes": 28.4
+   "today": 29.1,
+   "withTes": 27.8
   },
   "rushHourCommuteMinutes": {
-   "today": 32.5,
-   "withTes": 29.6
+   "today": 30.8,
+   "withTes": 28.9
   },
   "vehicleHours": {
-   "today": 1019442,
-   "withTes": 947528,
-   "percentLess": 7.1
+   "today": 974756,
+   "withTes": 924940,
+   "percentLess": 5.1
   },
   "delayHours": {
-   "today": 231914,
-   "withTes": 166725,
-   "percentLess": 28.1
+   "today": 197628,
+   "withTes": 150162,
+   "percentLess": 24
   },
   "vehicleKm": {
-   "today": 51715143,
-   "withTes": 51677700
+   "today": 51759352,
+   "withTes": 51651729
   },
   "fuelLitres": {
-   "today": 4448025,
-   "withTes": 4379157,
-   "percentLess": 1.5
+   "today": 4427901,
+   "withTes": 4357036,
+   "percentLess": 1.6
   },
   "roads": [
    {
-    "road": "I 10",
+    "road": "I 5",
     "jammedKmHoursToday": 25,
-    "jammedKmHoursWithTes": 15
+    "jammedKmHoursWithTes": 19
+   },
+   {
+    "road": "I 10",
+    "jammedKmHoursToday": 21,
+    "jammedKmHoursWithTes": 16
    },
    {
     "road": "I 405",
-    "jammedKmHoursToday": 23,
-    "jammedKmHoursWithTes": 18
-   },
-   {
-    "road": "I 5",
-    "jammedKmHoursToday": 22,
-    "jammedKmHoursWithTes": 20
-   },
-   {
-    "road": "I 110 EXPR",
-    "jammedKmHoursToday": 21,
-    "jammedKmHoursWithTes": 9
+    "jammedKmHoursToday": 19,
+    "jammedKmHoursWithTes": 16
    },
    {
     "road": "US 101",
@@ -58,37 +53,42 @@
     "jammedKmHoursWithTes": 16
    },
    {
-    "road": "I 10 EXPR",
-    "jammedKmHoursToday": 14,
-    "jammedKmHoursWithTes": 5
+    "road": "I 110 EXPR",
+    "jammedKmHoursToday": 13,
+    "jammedKmHoursWithTes": 13
    },
    {
-    "road": "Santa Monica Boulevard",
-    "jammedKmHoursToday": 8,
+    "road": "I 110",
+    "jammedKmHoursToday": 10,
     "jammedKmHoursWithTes": 7
    },
    {
     "road": "East Alvarado Street",
-    "jammedKmHoursToday": 7,
-    "jammedKmHoursWithTes": 8
-   },
-   {
-    "road": "I 110",
-    "jammedKmHoursToday": 7,
+    "jammedKmHoursToday": 8,
     "jammedKmHoursWithTes": 8
    },
    {
     "road": "CA 110",
     "jammedKmHoursToday": 7,
-    "jammedKmHoursWithTes": 6
+    "jammedKmHoursWithTes": 7
+   },
+   {
+    "road": "Santa Monica Boulevard",
+    "jammedKmHoursToday": 6,
+    "jammedKmHoursWithTes": 7
+   },
+   {
+    "road": "I 10 EXPR",
+    "jammedKmHoursToday": 6,
+    "jammedKmHoursWithTes": 5
    }
   ]
  },
- "headline": "Modeled morning commute with 60% of 2.39 million drivers using TES eased overall delays.",
+ "headline": "Modeled morning commute with 60% of drivers shows lighter congestion across Los Angeles.",
  "findings": [
-  "Modeled average commute changed from 30.3 to 28.4 minutes, with rush-hour from 32.5 to 29.6 minutes.",
-  "Modeled delay was 28.1% less, from 232 thousand to 167 thousand hours.",
-  "Modeled total distance barely changed at about 51.7 million km, while East Alvarado Street got worse from 7 to 8 jammed km hours."
+  "Modeled average commute fell from 29 to 28 minutes and rush-hour commute from 31 to 29 minutes.",
+  "Modeled delay was 24% less and vehicle time was 5% less.",
+  "Modeled jams fell on I 5 from 25 to 19 and on I 10 from 21 to 16, while Santa Monica Boulevard got worse from 6 to 7 and East Alvarado Street barely changed at 8."
  ],
- "caution": "Modeled results do not prove benefits beyond this simulated morning commute scenario."
+ "caution": "Modeled results do not prove real drivers will see the same benefits outside the simulated morning commute."
 }

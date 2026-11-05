@@ -10,10 +10,11 @@ const seed = Number(process.argv[3] ?? 1);
 const SCENARIOS = JSON.parse(
   process.env.SCENARIOS ??
     JSON.stringify([
-      { id: 'typical', label: 'Typical morning', tag: 'cap2.6', runs: ['apps', 'tes30', 'tes60', 'tes30s', 'tes60s', 'tes100', 'lab60'] },
-      { id: 'heavy', label: 'Heavier traffic', tag: 'cap2.3', runs: ['apps', 'tes30', 'tes100'] },
+      { id: 'mixed', label: 'Tougher mix of drivers', tag: 'habit30', runs: ['apps', 'tes60s', 'lab60'], baseline: 'Mixed drivers, no TES' },
+      { id: 'typical', label: 'Everyone on live traffic', tag: 'cap2.6', runs: ['apps', 'tes30', 'tes60', 'tes30s', 'tes60s', 'tes100', 'lab60'], baseline: 'Everyone on live traffic' },
+      { id: 'heavy', label: 'Heavier traffic', tag: 'cap2.3', runs: ['apps', 'tes30', 'tes100'], baseline: 'Everyone on live traffic' },
     ]),
-) as { id: string; label: string; tag: string; runs: string[] }[];
+) as { id: string; label: string; tag: string; runs: string[]; baseline?: string }[];
 const FRAME_MINUTES = 10;
 /** Very short segments add file size without changing the picture. */
 const MIN_LENGTH_METERS = 90;
@@ -85,7 +86,7 @@ const scenarios = SCENARIOS.map((scenario) => ({
     const r = run.result;
     return {
       id,
-      label: run.label,
+      label: run.tesShare === 0 && scenario.baseline ? scenario.baseline : run.label,
       tesShare: run.tesShare,
       meanMinutes: r.meanMinutes,
       rushMeanMinutes: r.rushMeanMinutes,
@@ -112,7 +113,7 @@ writeFileSync(
     frames,
     nodes: network.nodeCount,
     edges: keep.length,
-    note: 'Simulated morning commute. Roads (c) OpenStreetMap contributors, ODbL. Commute flows from US Census LODES 2023. In the typical morning, road capacity is calibrated so the baseline comes close to the Census average commute of 30.8 minutes. Modeled, not measured.',
+    note: 'Simulated morning commute. Roads (c) OpenStreetMap contributors, ODbL. Commute flows from US Census LODES 2023. Road capacity is calibrated so that with everyone on live traffic the average comes close to the Census 30.8 minutes. In the tougher mix, 30% of drivers off TES take their usual route. Modeled, not measured.',
     scenarios,
   }),
 );
