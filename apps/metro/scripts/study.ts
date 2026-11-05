@@ -13,7 +13,7 @@ const OUT = new URL('../data/runs/', import.meta.url);
 
 const RUNS: Record<string, { label: string; baseline: RoutingMode; tesShare: number; tesParking: boolean; shareAware?: boolean }> = {
   shortest: { label: 'No traffic data', baseline: 'free-flow', tesShare: 0, tesParking: false },
-  apps: { label: "Today's apps", baseline: 'live-traffic', tesShare: 0, tesParking: false },
+  apps: { label: 'Everyone on live traffic', baseline: 'live-traffic', tesShare: 0, tesParking: false },
   tes10: { label: '10% on TES', baseline: 'live-traffic', tesShare: 0.1, tesParking: true, shareAware: false },
   tes30: { label: '30% on TES', baseline: 'live-traffic', tesShare: 0.3, tesParking: true, shareAware: false },
   tes60: { label: '60% on TES', baseline: 'live-traffic', tesShare: 0.6, tesParking: true, shareAware: false },

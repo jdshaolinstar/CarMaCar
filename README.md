@@ -1,6 +1,6 @@
 # CarMaCar
 
-**Live demo:** LIVE_URL_HERE
+**Live demo:** https://dmqdzapklh34t.cloudfront.net
 
 **Demo video:** VIDEO_URL_HERE
 
@@ -129,7 +129,7 @@ It simulates one morning commute on Los Angeles's real road network: about 214,0
 
 | 190,648 simulated cars, one seed | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
 |---|---|---|---|---|
-| Today's apps, routing on live traffic | 30.3 min | 32.5 min | 1,019,442 | 231,914 |
+| Every driver routing on live traffic | 30.3 min | 32.5 min | 1,019,442 | 231,914 |
 | 30% on hand-tuned TES | 30.9 min | 33.4 min | 1,041,858 | 252,038 |
 | 60% on hand-tuned TES | 30.2 min | 32.3 min | 1,014,973 | 225,275 |
 | 30% on hand-tuned TES, load fix | 29.4 min | 31.0 min | 984,996 | 199,436 |
@@ -139,7 +139,9 @@ It simulates one morning commute on Los Angeles's real road network: about 214,0
 
 The original hand-tuned TES only helped once everyone was on it, and at 30% it made things worse. It counted only its own cars on each road, so at low adoption every road looked empty and its drivers piled onto the same routes. Measuring load against TES's share of each road fixed that: the fixed version gains 3.4% in vehicle-hours at 30% and 6.1% at 60%, and is identical at 100%.
 
-Muse's algorithm was written before that fix, by a model that was never told about the flaw. It came out slightly ahead of the fixed version, with 1.0% fewer vehicle-hours and 5.5% less delay, on one seed. Against today's apps it used 7.1% fewer vehicle-hours and had 28.1% less delay, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
+Muse's algorithm was written before that fix, by a model that was never told about the flaw. It came out slightly ahead of the fixed version, with 1.0% fewer vehicle-hours and 5.5% less delay, on one seed. Against every driver routing on live traffic, it used 7.1% fewer vehicle-hours and had 28.1% less delay, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
+
+The baseline matters. With nobody using traffic data, the same morning averages 56.3 minutes and 31,363 trips don't finish, so live routing helps a lot. But when 30% of those drivers took fixed routes, the baseline improved to 29.1 minutes, with rush hour at 30.8, which suggests drivers all reacting to the same traffic herd together in this model. Gains against a mixed baseline would likely be smaller than this table shows.
 
 This is modeled, and not a forecast. It covers home-to-work commutes only, with assumed drive share, departure times and parking share. Small residential streets are absent, and drivers do not reroute mid-trip.
 
@@ -226,6 +228,10 @@ Planned work, including graphics levels from blocks up to open-world quality, is
 Everything in this repo was built during the event, between November 3 and 4, 2026. The commit history shows the order. It uses no earlier code.
 
 Meta models and tools used in the product: SAM 3.1 and Muse Spark 1.3, through the Meta Model API. The code was written with Claude Code.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). You can read, run and change this code for noncommercial purposes. Commercial use needs written permission from Jermaine Dennis. This is a source-available license, not an open-source one.
 
 ## Assets and licenses
 

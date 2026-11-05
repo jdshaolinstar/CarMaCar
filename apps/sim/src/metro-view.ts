@@ -332,7 +332,7 @@ async function startLab(summary: Summary) {
     const held = session.heldOut;
     const foot = [
       `SimTest used ${session.simTest.cars.toLocaleString('en-US')} cars, so its percentages only compare candidates with each other.`,
-      held ? `On commuters it never saw: ${exact(held.apps.vehicleHours)} vehicle-hours with today's apps, ${exact(held.handTuned.vehicleHours)} with hand-tuned TES, ${exact(held.winner.vehicleHours)} with the Lab winner.` : '',
+      held ? `On commuters it never saw: ${exact(held.apps.vehicleHours)} vehicle-hours with everyone on live traffic, ${exact(held.handTuned.vehicleHours)} with hand-tuned TES, ${exact(held.winner.vehicleHours)} with the Lab winner.` : '',
       session.mode === 'params' && session.references.rough && session.references.handTuned ? `Rough start ${exact(session.references.rough.vehicleHours)}, hand-tuned ${exact(session.references.handTuned.vehicleHours)} vehicle-hours in SimTest. Muse never saw the hand-tuned values.` : '',
       fixed && muse ? `"Hand-tuned" here means the routing before its load fix. At full size with 60% of drivers, the fixed version used ${exact(fixed.vehicleHours)} vehicle-hours and Muse's algorithm ${exact(muse.vehicleHours)}.` : '',
       `Written by ${session.model}. Recorded session: this page replays it and does not run a model.`,
