@@ -127,7 +127,7 @@ The 3D city proves the pipeline. This study asks whether the idea holds at city 
 
 It simulates one morning commute on Los Angeles's real road network: about 214,000 road segments from OpenStreetMap and 2.4 million drivers modeled from US Census commute data. It is a 2D, queue-based model with no cameras, and runs were computed offline, so the page replays recorded results. Road capacity is calibrated at full size so the baseline, every driver on live traffic, averages 30.3 minutes, against the Census figure of 30.8.
 
-| 190,648 simulated cars, one seed | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
+| 190,648 simulated cars, seed 1 | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
 |---|---|---|---|---|
 | Every driver routing on live traffic | 30.3 min | 32.5 min | 1,019,442 | 231,914 |
 | 30% on hand-tuned TES | 30.9 min | 33.4 min | 1,041,858 | 252,038 |
@@ -139,9 +139,19 @@ It simulates one morning commute on Los Angeles's real road network: about 214,0
 
 The original hand-tuned TES only helped once everyone was on it, and at 30% it made things worse. It counted only its own cars on each road, so at low adoption every road looked empty and its drivers piled onto the same routes. Measuring load against TES's share of each road fixed that: the fixed version gains 3.4% in vehicle-hours at 30% and 6.1% at 60%, and is identical at 100%.
 
-Muse's algorithm was written before that fix, by a model that was never told about the flaw. It came out slightly ahead of the fixed version, with 1.0% fewer vehicle-hours and 5.5% less delay, on one seed. Against every driver routing on live traffic, it used 7.1% fewer vehicle-hours and had 28.1% less delay, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
+Muse's algorithm was written before that fix, by a model that was never told about the flaw. It came out ahead of the fixed version on both full-size seeds, averaging 1.9% fewer vehicle-hours and 8.7% less delay, and it was the steadiest of the three, with rush hour at 29.6 minutes on both. Against every driver routing on live traffic, it used 7.1% fewer vehicle-hours and had 28.1% less delay, with distance about flat and estimated fuel 1.5% lower. The median trip barely moves, so the gain goes to the drivers in the worst traffic.
 
-The baseline matters. With nobody using traffic data, the same morning averages 56.3 minutes and 31,363 trips don't finish, so live routing helps a lot. But when 30% of those drivers took fixed routes, the baseline improved to 29.1 minutes, with rush hour at 30.8, which suggests drivers all reacting to the same traffic herd together in this model. Gains against a mixed baseline would likely be smaller than this table shows.
+#### A tougher baseline
+
+The baseline matters. With nobody using traffic data, the same morning averages 56.3 minutes and 31,363 trips don't finish, so live routing helps a lot. But it isn't the best mix. When 30% of the drivers not on TES take their usual route and ignore traffic, the morning improves, which suggests drivers all reacting to the same traffic herd together in this model. That makes it a harder baseline to beat, so we tested against it too:
+
+| 190,648 simulated cars, one seed, 30% of drivers off TES on usual routes | Average trip | Rush hour trip | Vehicle-hours | Delay hours |
+|---|---|---|---|---|
+| No TES, mixed drivers | 29.1 min | 30.8 min | 974,756 | 197,628 |
+| 60% on hand-tuned TES, load fix | 29.6 min | 31.6 min | 994,654 | 213,420 |
+| **60% on Muse's algorithm** | **27.8 min** | **28.9 min** | **924,940** | **150,162** |
+
+Against this baseline, Muse's algorithm used 5.1% fewer vehicle-hours, about 49,800 in one morning, with 24.0% less delay and estimated fuel 1.6% lower. Hand-tuned routing did worse than no TES at all. Treat the numbers above as a range: gains depend on how good the baseline is, and this is the fairer of the two comparisons.
 
 This is modeled, and not a forecast. It covers home-to-work commutes only, with assumed drive share, departure times and parking share. Small residential streets are absent, and drivers do not reroute mid-trip.
 

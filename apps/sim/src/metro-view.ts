@@ -431,9 +431,8 @@ async function main() {
   }
   fillAdoption();
 
-  $('left-name').textContent = baseline.label;
-
   function showSummary() {
+    $('left-name').textContent = baseline.label;
     $('right-name').textContent = active.label;
     const hours = baseline.vehicleHours - active.vehicleHours;
     const fuel = baseline.fuelLitres - active.fuelLitres;
