@@ -34,6 +34,8 @@ const HOME_RADIUS = 330;
 const HOME_SPAN = 372;
 const UPPER_RADIUS_RATIO = 460 / 330;
 const SKYLINE_BETA = 0.95;
+const FAR_REACH_RATIO = 1.6;
+const GROUND_SIZE = 1400;
 const WORLD_LAYER = 0x0fffffff;
 /** Hidden from people by the garage level view. Capture cameras still see it. */
 const CAPTURE_ONLY_LAYER = 0x40000000;
@@ -123,6 +125,18 @@ export class CityScene {
   readonly engine: Engine;
   readonly scene: Scene;
   readonly overview: ArcRotateCamera;
+  /** How far from the center real scenery reaches. Zero for a city with none, such as the demo town. */
+  get sceneryReach() {
+    let reach = 0;
+    for (const b of this.city.buildings ?? []) if (b.scenery) reach = Math.max(reach, Math.abs(b.x) + b.w / 2, Math.abs(b.z) + b.d / 2);
+    return reach;
+  }
+
+  /** How far back the city view can pull. */
+  private get farRadius() {
+    return Math.max(this.homeRadius * UPPER_RADIUS_RATIO, this.sceneryReach * FAR_REACH_RATIO);
+  }
+
   /** How far back the city view sits, scaled so a larger city still fits. */
   private get homeRadius() {
     const { minX, maxX, minZ, maxZ } = this.city.bounds;
@@ -190,7 +204,7 @@ export class CityScene {
 
     this.overview = new ArcRotateCamera('overview', -Math.PI / 2, 0.5, 330, new Vector3(30, 0, 0), this.scene);
     this.overview.lowerRadiusLimit = 40;
-    this.overview.upperRadiusLimit = this.homeRadius * UPPER_RADIUS_RATIO;
+    this.overview.upperRadiusLimit = this.farRadius;
     this.overview.radius = this.homeRadius;
     // Real skylines read better from an angle than straight down.
     if (city.buildings) this.overview.beta = SKYLINE_BETA;
@@ -204,7 +218,7 @@ export class CityScene {
     this.chase = new FreeCamera('chase', new Vector3(0, 3, 0), this.scene);
     this.chase.fov = 1.0;
     this.chase.minZ = 0.2;
-    this.chase.maxZ = 900;
+    this.chase.maxZ = Math.max(900, this.sceneryReach * 1.5);
     this.chase.layerMask = WORLD_LAYER | LABEL_LAYER;
 
     this.capture = new FreeCamera('capture', new Vector3(0, 1.4, 0), this.scene);
@@ -461,7 +475,8 @@ export class CityScene {
 
   private buildGround() {
     const asphalt = this.solid('#55585c');
-    const ground = this.flat('asphalt', 1400, 1400, 0, 0, asphalt, 0);
+    const size = Math.max(GROUND_SIZE, this.sceneryReach * 2 + 400);
+    const ground = this.flat('asphalt', size, size, 0, 0, asphalt, 0);
     ground.isPickable = true;
 
     const yellow = this.solid('#e6c34a');
@@ -589,13 +604,15 @@ export class CityScene {
       ['#607d8b', '#1f2930'],
     ];
     const byPalette: Mesh[][] = palettes.map(() => []);
+    // Kept apart, because a skyline casting shadows would spread the shadow map too thin for the streets.
+    const sceneryByPalette: Mesh[][] = palettes.map(() => []);
     const nodes = this.city.nodes;
     const xs = [...new Set(nodes.map((n) => n.x))].sort((a, b) => a - b);
     const zs = [...new Set(nodes.map((n) => n.z))].sort((a, b) => a - b);
     const inset = this.city.roadHalfWidth + this.city.sidewalkWidth;
     let n = 0;
 
-    const addBuilding = (x: number, z: number, w: number, d: number, height?: number) => {
+    const addBuilding = (x: number, z: number, w: number, d: number, height?: number, scenery = false) => {
       const h = height ?? 6 + ((n * 37) % 10);
       const uvW = w / 4;
       const uvD = d / 4;
@@ -620,8 +637,8 @@ export class CityScene {
         this.scene,
       );
       box.position.set(x, h / 2, z);
-      this.buildingBoxes.push({ x, z, w, d, h });
-      byPalette[n % palettes.length].push(box);
+      if (!scenery) this.buildingBoxes.push({ x, z, w, d, h });
+      (scenery ? sceneryByPalette : byPalette)[n % palettes.length].push(box);
       n++;
     };
 
@@ -641,7 +658,7 @@ export class CityScene {
     const xLines = [xs[0] - SPACING_X, ...xs, xs[xs.length - 1] + SPACING_X];
     const zLines = [zs[0] - SPACING_Z, ...zs, zs[zs.length - 1] + SPACING_Z];
     if (this.city.buildings) {
-      for (const b of this.city.buildings) addBuilding(b.x, b.z, b.w, b.d, b.h);
+      for (const b of this.city.buildings) addBuilding(b.x, b.z, b.w, b.d, b.h, b.scenery);
     } else {
       for (let i = 0; i < xLines.length - 1; i++) {
         for (let j = 0; j < zLines.length - 1; j++) {
@@ -654,8 +671,8 @@ export class CityScene {
 
     palettes.forEach(([wall, glass], i) => {
       const parts = byPalette[i];
-      if (parts.length === 0) return;
-      const merged = Mesh.MergeMeshes(parts, true, true)!;
+      const distant = sceneryByPalette[i];
+      if (parts.length === 0 && distant.length === 0) return;
       const m = new StandardMaterial(`facade${i}`, this.scene);
       m.diffuseTexture = facadeTexture(this.scene, wall, glass);
       const lit = nightTexture(this.scene);
@@ -665,10 +682,19 @@ export class CityScene {
       m.emissiveTexture = lit;
       this.facadeMaterials.push(m);
       m.specularColor = new Color3(0.06, 0.06, 0.06);
-      merged.material = m;
-      merged.isPickable = false;
-      this.shadows.addShadowCaster(merged);
-      this.buildingMeshes.push(merged);
+      if (parts.length > 0) {
+        const merged = Mesh.MergeMeshes(parts, true, true)!;
+        merged.material = m;
+        merged.isPickable = false;
+        this.shadows.addShadowCaster(merged);
+        this.buildingMeshes.push(merged);
+      }
+      if (distant.length > 0) {
+        const skyline = Mesh.MergeMeshes(distant, true, true)!;
+        skyline.material = m;
+        skyline.isPickable = false;
+        this.buildingMeshes.push(skyline);
+      }
     });
   }
 
@@ -678,7 +704,7 @@ export class CityScene {
   }
 
   setViewDistance(metres: number) {
-    this.chase.maxZ = metres;
+    this.chase.maxZ = Math.max(metres, this.sceneryReach * 1.5);
   }
 
   /** Lowest graphics levels. Capture cameras keep seeing the normal buildings. */
@@ -1096,7 +1122,7 @@ export class CityScene {
 
   /** Pulls the city view back far enough to see the whole highway, or returns to the town. */
   frameHighway(on: boolean) {
-    this.overview.upperRadiusLimit = on ? 1100 : this.homeRadius * UPPER_RADIUS_RATIO;
+    this.overview.upperRadiusLimit = on ? 1100 : this.farRadius;
     this.overview.radius = on ? 900 : this.homeRadius;
     this.overview.beta = on ? 0.62 : 0.5;
     this.overview.target.set(on ? 0 : 30, 0, 0);

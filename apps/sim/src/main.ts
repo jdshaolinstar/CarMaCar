@@ -907,6 +907,13 @@ const cinema = city.destinations.find((d) => d.kind === 'cinema')!;
 
 const playbooks: Playbook[] = [
   {
+    id: 'real-manhattan',
+    title: 'Midtown Manhattan, built by Muse',
+    description: 'Muse Spark chose this area from one sentence, and code built it from OpenStreetMap: real avenues, theaters and about 8,000 real buildings. Streets around 42nd Street are simulated. Stalls, the garage and traffic are generated.',
+    watch: 'Pull the camera back to see the real skyline. Real SAM reads cars here too.',
+    run: () => window.location.assign('?place=nyc&gfx=5'),
+  },
+  {
     id: 'real-downtown',
     title: 'Real downtown Los Angeles, in 3D',
     description: 'Runs this same system on real streets and buildings from OpenStreetMap, around Broadway and 6th. Parking stalls and the garage are generated, and the traffic is simulated.',
@@ -1197,11 +1204,16 @@ async function runResidents() {
 setInterval(() => void runResidents(), 5000);
 
 // The driver's phone.
-const placeLink = $('place-link') as HTMLAnchorElement;
-if (city.buildings) {
-  placeLink.textContent = 'Demo town';
-  placeLink.href = './';
-}
+// Cities the app ships with. Each real one was built from map data by the same converter.
+const CITY_CHOICES = [
+  { id: '', label: 'Demo town' },
+  { id: 'dtla', label: 'Downtown Los Angeles' },
+  { id: 'nyc', label: 'Midtown Manhattan' },
+];
+const placePick = $('place-pick') as HTMLSelectElement;
+for (const choice of CITY_CHOICES) placePick.append(new Option(choice.label, choice.id));
+placePick.value = place ?? '';
+placePick.addEventListener('change', () => window.location.assign(placePick.value ? `?place=${placePick.value}&gfx=5` : './'));
 const phone = new PhoneApp($('phone-map') as HTMLCanvasElement, city, world);
 phone.renderDestinations($('phone-places'), (name) => {
   ($('trip-text') as HTMLInputElement).value = `Take me to ${name} and find parking`;

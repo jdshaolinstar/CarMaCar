@@ -1,0 +1,16 @@
+{
+ "id": "nyc",
+ "name": "Midtown Times Square",
+ "request": "Midtown Manhattan in New York City, around Times Square",
+ "box": [
+  40.741,
+  -74.008,
+  40.773,
+  -73.966
+ ],
+ "region": "north-america/us/new-york",
+ "reasoning": "Regular Midtown grid centered on Times Square and the Broadway Theater District provides dense traffic, major avenues, and abundant parking garages.",
+ "model": "muse-spark-1.3-contributor",
+ "tokens": 2163,
+ "seconds": 691
+}

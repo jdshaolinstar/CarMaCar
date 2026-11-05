@@ -200,7 +200,8 @@ export class GraphicsLevels {
       merged.parent = this.detail;
     }
 
-    this.sky = MeshBuilder.CreateSphere('gfx-sky', { diameter: SKY_DIAMETER, segments: 24, sideOrientation: Mesh.BACKSIDE }, scene);
+    const diameter = Math.max(SKY_DIAMETER, (this.view.sceneryReach + 1000) * 2);
+    this.sky = MeshBuilder.CreateSphere('gfx-sky', { diameter, segments: 24, sideOrientation: Mesh.BACKSIDE }, scene);
     const texture = new DynamicTexture('gfx-sky', { width: 1024, height: 512 }, scene, true);
     const ctx = texture.getContext() as CanvasRenderingContext2D;
     const gradient = ctx.createLinearGradient(0, 0, 0, 512);

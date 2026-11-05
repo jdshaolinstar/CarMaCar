@@ -18,6 +18,8 @@ const STREET_TYPES = new Set(['primary', 'secondary', 'tertiary', 'trunk', 'resi
 /** Two carriageways of one street, or streets closer than this, count as one line. */
 const MIN_STREET_GAP = 45;
 const ROAD_CLEARANCE = 9.5;
+/** A street this long always counts as part of the grid, however wide the area is. */
+const MIN_STREET_LENGTH = 600;
 const METRES_PER_LEVEL = 4;
 const UNKNOWN_HEIGHT = 14;
 const MIN_BUILDING_SIDE = 5;
@@ -107,14 +109,13 @@ function streets(vertical: boolean): Line[] {
 function pick(lines: Line[], count: number, reach: number): Line[] {
   const kept: Line[] = [];
   for (const line of [...lines].sort((a, b) => b.span - a.span)) {
-    if (line.span < reach * 0.55) continue;
+    if (line.span < Math.min(reach * 0.55, MIN_STREET_LENGTH)) continue;
     if (kept.some((k) => Math.abs(k.at - line.at) < MIN_STREET_GAP)) continue;
     kept.push(line);
   }
   // Take a run of neighboring streets, so the result is one connected piece of the city.
-  const ordered = kept.sort((a, b) => a.at - b.at);
-  const start = Math.max(0, Math.floor((ordered.length - count) / 2));
-  return ordered.slice(start, start + count);
+  // Centered on the middle of the box, so a wider extract keeps the same streets at its heart.
+  return kept.sort((a, b) => Math.abs(a.at) - Math.abs(b.at)).slice(0, count).sort((a, b) => a.at - b.at);
 }
 
 const allX = roads.flatMap((r) => r.points.map((p) => local(p).x));
@@ -164,6 +165,7 @@ interface Place extends RealBuilding {
 }
 
 const footprints: Place[] = [];
+const scenery: RealBuilding[] = [];
 for (const shape of raw.shapes) {
   if (!shape.tags.building || shape.points.length < 3) continue;
   const corners = shape.points.map(placed);
@@ -173,6 +175,20 @@ for (const shape of raw.shapes) {
   const highZ = Math.max(...corners.map((c) => c.z));
   const centerX = (lowX + highX) / 2;
   const centerZ = (lowZ + highZ) / 2;
+  // Past the simulated streets, a footprint is scenery: real shape and height, with nothing to clear for.
+  if (!inArea({ x: centerX, z: centerZ })) {
+    let area = 0;
+    for (let i = 0; i < corners.length; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % corners.length];
+      area += a.x * b.z - b.x * a.z;
+    }
+    const fill = Math.min(1, Math.sqrt(Math.abs(area) / 2 / ((highX - lowX) * (highZ - lowZ))));
+    const w = (highX - lowX) * fill;
+    const d = (highZ - lowZ) * fill;
+    if (w >= MIN_BUILDING_SIDE && d >= MIN_BUILDING_SIDE) scenery.push({ ...round({ x: centerX, z: centerZ, w, d }), h: Math.round(heightOf(shape.tags)), scenery: true, ...(shape.tags.name ? { name: shape.tags.name } : {}) });
+    continue;
+  }
   const [x0, x1] = clearStreets(lowX, highX, centerX, xs);
   const [z0, z1] = clearStreets(lowZ, highZ, centerZ, zs);
   if (x1 - x0 < MIN_BUILDING_SIDE || z1 - z0 < MIN_BUILDING_SIDE) continue;
@@ -210,8 +226,15 @@ for (const place of featured) {
   usedNames.add(place.name!);
   destinations.push({ name: place.name!, kind: place.kind!, segment: spot.segment, along: round({ a: spot.along }).a, side: spot.side });
 }
-// The app's playbooks expect a cinema. Downtown has theaters, but the data may not name one in this area.
-if (!destinations.some((d) => d.kind === 'cinema')) throw new Error('No theater found in this area. Pick a different box.');
+// The app's event playbooks need a venue. When the data names no theater here, the largest named building stands in.
+if (!destinations.some((d) => d.kind === 'cinema')) {
+  const venue = footprints.filter((f) => f.name).sort((a, b) => b.w * b.d - a.w * a.d)[0];
+  const spot = venue && segmentFor(venue);
+  if (!spot) throw new Error('No named building near these streets. Pick a different area.');
+  const existing = destinations.findIndex((d) => d.name === venue.name);
+  if (existing >= 0) destinations.splice(existing, 1);
+  destinations.unshift({ name: venue.name!, kind: 'cinema', segment: spot.segment, along: round({ a: spot.along }).a, side: spot.side });
+}
 
 // One parking structure, on the middle block of the widest row of blocks, at a real structure if one is mapped.
 const GARAGE_WIDTH = 60;
@@ -231,12 +254,12 @@ const layout: CityLayout = {
   columnStreets: columns.map((c) => c.name),
   garages,
   destinations,
-  buildings,
+  buildings: [...buildings, ...scenery],
 };
 const city = buildCity(layout);
 writeFileSync(target, JSON.stringify(city));
 console.log(`grid turned ${((angle * 180) / Math.PI).toFixed(1)} degrees`);
 console.log('north-south:', columns.map((c) => c.name).join(', '), xs.join(' '));
 console.log('east-west:', rowsPicked.map((r) => r.name).join(', '), zs.join(' '));
-console.log(`${city.segments.length} street segments, ${city.stalls.length} stalls, ${buildings.length} buildings, tallest ${Math.max(...buildings.map((b) => b.h))} m`);
+console.log(`${city.segments.length} street segments, ${city.stalls.length} stalls, ${buildings.length} buildings, ${scenery.length} in the skyline, tallest ${Math.max(...[...buildings, ...scenery].map((b) => b.h))} m`);
 console.log('places:', destinations.map((d) => `${d.name} (${d.kind})`).join('; '));

@@ -171,6 +171,18 @@ With no retuning, SAM read this city correctly: over 64 live frames at dusk, 98.
 
 A converter makes this from any area with a square street grid. See `apps/metro/scripts/pbf-block.py` and `real-block.ts`.
 
+## Muse builds a city
+
+One request becomes a playable 3D city from real map data:
+
+```bash
+node --env-file=.env --import tsx apps/metro/scripts/muse-build-city.ts "Midtown Manhattan in New York City, around Times Square" nyc 4 4
+```
+
+Muse Spark picks the area and the regional map file. Ordinary code downloads the OpenStreetMap data, builds the streets and buildings, and checks the result, so a wrong answer fails a check. It can't invent a road. It takes about 10 minutes, mostly reading the regional file, and the Muse call uses about 2,000 tokens.
+
+Midtown Manhattan was built this way: 6th through 9th Avenues crossing 42nd through 45th Streets, with real theaters, and about 8,000 real buildings around them. Pick it from the **City** menu. It works best where streets form a grid. Other street patterns may fail the checks or come out simplified, and stalls, the garage and traffic are generated.
+
 ## Which parts are real
 
 | Part | Status |
@@ -187,6 +199,7 @@ A converter makes this from any area with a square street grid. See `apps/metro/
 | Highway, its drivers and demand | Simulation. A driver model, with no AI. |
 | Muse Lab | Production idea, run offline. Muse Spark writes the algorithms, and the Los Angeles simulator tests them. |
 | Real downtown Los Angeles | Simulation. Real streets and buildings. Stalls, garage and traffic are generated. |
+| Muse city builder | Muse Spark picks the place. Code builds it from OpenStreetMap, and traffic is simulated. |
 | Los Angeles study | Simulation. Real roads and Census commute flows, with modeled traffic. |
 | Graphics levels, weather, city sound | Display only. A pixel comparison at level 6 in rain showed no change in camera frames. |
 | Trash hunt game | Simulation. Game rules, with no AI. Tested not to change traffic. |

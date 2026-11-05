@@ -96,6 +96,8 @@ export interface RealBuilding extends Vec2 {
   d: number;
   h: number;
   name?: string;
+  /** Beyond the simulated streets. Part of the skyline, with no traffic or parking around it. */
+  scenery?: boolean;
 }
 
 /** What makes one city different from another. Everything else in a CityMap is derived from this. */

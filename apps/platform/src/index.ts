@@ -1,7 +1,7 @@
 // CarMaCar platform. Receives pixels and pose, keeps a live parking map, runs trip agents.
 // It imports nothing from the sim. Its only contact with the sim is this HTTP API.
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
@@ -63,10 +63,14 @@ const spark = new SparkVision(client, AGENT_MODEL, (tokens) => addSpend(tokens *
 const defaultCity: CityMap = process.env.CITY_FILE ? JSON.parse(readFileSync(process.env.CITY_FILE, 'utf8')) : generateCity();
 
 /** Places a session can ask for, by name only. A browser can never point the server at a file. */
-const PLACE_FILES: Record<string, URL> = { dtla: new URL('../../sim/public/cities/dtla.json', import.meta.url) };
+const PLACE_DIR = new URL('../../sim/public/cities/', import.meta.url);
 const places = new Map<string, CityMap>();
-for (const [id, file] of Object.entries(PLACE_FILES)) {
-  if (existsSync(file)) places.set(id, JSON.parse(readFileSync(file, 'utf8')) as CityMap);
+if (existsSync(PLACE_DIR)) {
+  for (const file of readdirSync(PLACE_DIR)) {
+    if (file.endsWith('.json') && !file.endsWith('.place.json')) {
+      places.set(file.replace(/\.json$/, ''), JSON.parse(readFileSync(new URL(file, PLACE_DIR), 'utf8')) as CityMap);
+    }
+  }
 }
 
 function roadsOf(city: CityMap) {
